@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Audit Log</h1>
+        <span class="badge badge-ghost text-sm">{{ logs|length }} entries</span>
+    </div>
+
+    <!-- Filter -->
+    <div class="tabs tabs-boxed w-fit">
+        <a href="/audit?entity=ALL" class="tab {{ 'tab-active' if filter == 'ALL' else '' }}">All</a>
+        <a href="/audit?entity=Order" class="tab {{ 'tab-active' if filter == 'Order' else '' }}">Orders</a>
+        <a href="/audit?entity=Payment" class="tab {{ 'tab-active' if filter == 'Payment' else '' }}">Payments</a>
+        <a href="/audit?entity=Customer" class="tab {{ 'tab-active' if filter == 'Customer' else '' }}">Customers</a>
+        <a href="/audit?entity=Product" class="tab {{ 'tab-active' if filter == 'Product' else '' }}">Products</a>
+    </div>
+
+    {% if logs %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-0">
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Time</th>
+                            <th>Entity</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for log in logs %}
+                        <tr class="hover">
+                            <td class="text-sm font-mono whitespace-nowrap">{{ log.changed_at.strftime('%d %b %H:%M') }}</td>
+                            <td>
+                                <span class="badge badge-ghost badge-sm">{{ log.entity_type }}#{{ log.entity_id }}</span>
+                            </td>
+                            <td>
+                                {% set action_colors = {'CREATE': 'badge-success', 'UPDATE': 'badge-info', 'DELETE': 'badge-error', 'STATUS_CHANGE': 'badge-warning', 'PAYMENT': 'badge-primary'} %}
+                                <span class="badge {{ action_colors.get(log.action, 'badge-ghost') }} badge-sm">{{ log.action }}</span>
+                            </td>
+                            <td class="text-sm text-base-content/70 max-w-xs truncate" title="{{ log.new_value or log.old_value }}">
+                                {{ log.new_value or log.old_value or '—' }}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <p class="text-5xl mb-4">📜</p>
+            <h2 class="text-xl font-bold">No audit entries yet</h2>
+            <p class="text-base-content/60 mt-1">Actions will appear here as you use the system.</p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

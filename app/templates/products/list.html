@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Products — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">Products</h1>
+        <a href="/products/new" class="btn btn-amber btn-sm font-semibold"">+ Add Product</a>
+    </div>
+
+    <!-- Product Grid -->
+    {% if products %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {% for product in products %}
+        <div class="card bg-base-100 shadow-sm hover:shadow-md transition-shadow">
+            <div class="card-body p-4">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h3 class="font-bold text-lg">{{ product.name }}</h3>
+                        <p class="text-sm text-base-content/60 font-mono">{{ product.sku }}</p>
+                    </div>
+                    {% if product.is_active %}
+                        <span class="badge badge-success badge-sm">Active</span>
+                    {% else %}
+                        <span class="badge badge-ghost badge-sm">Inactive</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex gap-2 mt-2">
+                    <span class="badge badge-outline badge-sm">{{ product.category }}</span>
+                    <span class="badge badge-ghost badge-sm">HSN: {{ product.hsn_code }}</span>
+                    <span class="badge badge-ghost badge-sm">GST: {{ product.gst_rate }}%</span>
+                </div>
+
+                <div class="flex justify-between items-center mt-3 pt-3 border-t border-base-200">
+                    <span class="text-xl font-bold">{{ settings.currency }}{{ "{:,.2f}".format(product.base_price) }}</span>
+                    <div class="flex gap-2">
+                        <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-xs btn-info gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                            </svg>
+                            Edit
+                        </a>
+                        <form hx-post="/products/{{ product.id }}/delete"
+                              hx-confirm="Delete '{{ product.name }}'? This cannot be undone."
+                              hx-swap="none"
+                              hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+                            <button class="btn btn-outline btn-xs btn-error gap-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                </svg>
+                                Delete
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <p class="text-5xl mb-4">🎂</p>
+            <h2 class="text-xl font-bold">No products yet</h2>
+            <p class="text-base-content/60 mt-1">Add your first product to get started.</p>
+            <a href="/products/new" class="btn btn-amber mt-4">+ Add Product</a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

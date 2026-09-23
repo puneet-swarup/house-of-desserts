@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% block title %}{{ order.order_number }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <!-- Header -->
+    <div class="flex justify-between items-start">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900 font-mono">{{ order.order_number }}</h1>
+            <p class="text-base-content/60">
+                {{ order.customer.name }} · {{ order.order_date.strftime('%d %b %Y %H:%M') }}
+            </p>
+        </div>
+        <div class="flex gap-2 items-center">
+            <span class="badge badge-lg badge-ghost">{{ order.status.value.replace('_', ' ') }}</span>
+            <a href="/orders" class="btn btn-ghost btn-sm">← All</a>
+        </div>
+    </div>
+
+    <!-- Status Actions -->
+    {% if order.status.value not in ['CANCELLED', 'PAID'] %}
+    <div class="flex gap-2">
+        {% set next_status = {
+            'INQUIRY': 'CONFIRMED',
+            'CONFIRMED': 'IN_PROGRESS',
+            'IN_PROGRESS': 'READY',
+            'READY': 'DELIVERED',
+            'DELIVERED': 'PAID'
+        }.get(order.status.value) %}
+        {% if next_status %}
+        <form hx-post="/orders/{{ order.id }}/status"
+              hx-vals='{"status": "{{ next_status }}"}'
+              hx-swap="none"
+              hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+            <button class="btn btn-primary btn-sm">Mark {{ next_status.replace('_', ' ') }}</button>
+        </form>
+        {% endif %}
+        <form hx-post="/orders/{{ order.id }}/status"
+              hx-vals='{"status": "CANCELLED"}'
+              hx-confirm="Cancel this order?"
+              hx-swap="none"
+              hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+            <button class="btn btn-ghost btn-sm text-error">Cancel Order</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <!-- Invoice Actions -->
+    <div class="flex gap-2 mt-2">
+        <a href="/invoices/orders/{{ order.id }}/invoice" class="btn btn-outline btn-sm btn-info gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            View Invoice
+        </a>
+        <form action="/invoices/orders/{{ order.id }}/print-receipt" method="post" class="inline">
+            <button type="submit" class="btn btn-outline btn-sm btn-amber gap-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+                </svg>
+                Print Receipt
+            </button>
+        </form>
+    </div>
+
+    <!-- Items -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="card-title text-lg">Items</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>SKU</th>
+                            <th>Qty</th>
+                            <th>Unit Price</th>
+                            <th>Total</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in order.items %}
+                        <tr>
+                            <td class="font-medium">{{ item.product.name }}</td>
+                            <td class="font-mono text-sm text-base-content/60">{{ item.product.sku }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>{{ settings.currency }}{{ "{:,.2f}".format(item.unit_price) }}</td>
+                            <td class="font-semibold">{{ settings.currency }}{{ "{:,.2f}".format(item.line_total) }}</td>
+                            <td class="text-sm text-base-content/60">{{ item.customization_notes or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4" class="text-right font-semibold">Total:</td>
+                            <td class="font-bold text-lg">{{ settings.currency }}{{ "{:,.2f}".format(order.total_amount) }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Payments -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <div class="flex justify-between items-center">
+                <h2 class="card-title text-lg">Payments</h2>
+                <span class="badge {{ 'badge-error' if order.balance_due > 0 else 'badge-success' }}">
+                    Balance: {{ settings.currency }}{{ "{:,.2f}".format(order.balance_due) }}
+                </span>
+            </div>
+
+            {% if order.payments %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr><th>Date</th><th>Amount</th><th>Method</th><th>Reference</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for p in order.payments %}
+                        <tr>
+                            <td class="text-sm">{{ p.received_at.strftime('%d %b %Y %H:%M') }}</td>
+                            <td class="font-semibold">{{ settings.currency }}{{ "{:,.2f}".format(p.amount) }}</td>
+                            <td><span class="badge badge-ghost badge-sm">{{ p.method }}</span></td>
+                            <td class="font-mono text-sm">{{ p.reference or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-base-content/50 text-sm">No payments recorded.</p>
+            {% endif %}
+
+            <!-- Add Payment -->
+            {% if order.balance_due > 0 and order.status.value not in ['CANCELLED'] %}
+            <form method="post" action="/orders/{{ order.id }}/payments" class="mt-4 flex gap-2 items-end">
+                <div class="form-control w-32">
+                    <label class="label text-xs"><span class="label-text">Amount</span></label>
+                    <input type="number" name="amount" step="0.01" min="0.01"
+                           max="{{ order.balance_due }}" value="{{ order.balance_due }}"
+                           class="input input-bordered input-sm" required />
+                </div>
+                <div class="form-control w-28">
+                    <label class="label text-xs"><span class="label-text">Method</span></label>
+                    <select name="method" class="select select-bordered select-sm">
+                        <option value="UPI">UPI</option>
+                        <option value="CASH">Cash</option>
+                        <option value="BANK">Bank</option>
+                    </select>
+                </div>
+                <div class="form-control flex-1">
+                    <label class="label text-xs"><span class="label-text">Reference (optional)</span></label>
+                    <input type="text" name="reference" class="input input-bordered input-sm"
+                           placeholder="Txn ID" />
+                </div>
+                <button type="submit" class="btn btn-success btn-sm">Record</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Delivery Info -->
+    {% if order.delivery_type == 'DELIVERY' and order.delivery_address %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body p-4">
+            <p class="text-sm"><span class="font-semibold">📍 Deliver to:</span> {{ order.delivery_address }}</p>
+            {% if order.delivery_date %}
+            <p class="text-sm text-base-content/60">📅 {{ order.delivery_date.strftime('%d %b %Y') }}</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

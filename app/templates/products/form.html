@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if product else "Add" }} Product — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">{{ "Edit" if product else "Add" }} Product</h1>
+        <a href="/products" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    <form method="post" action="{{ '/products/' ~ product.id ~ '/edit' if product else '/products' }}"
+          class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-4">
+
+            <!-- Name -->
+            <div class="form-control">
+                <label class="label"><span class="label-text font-medium">Name *</span></label>
+                <input type="text" name="name" value="{{ product.name if product else '' }}"
+                       class="input input-bordered w-full" placeholder="e.g., Choco Truffle Cake" required />
+            </div>
+
+            <!-- SKU + HSN row -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">SKU *</span></label>
+                    <input type="text" name="sku" value="{{ product.sku if product else '' }}"
+                           class="input input-bordered w-full font-mono" placeholder="e.g., CHOC-TRUFFLE-500G" required />
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">HSN Code</span></label>
+                    <input type="text" name="hsn_code" value="{{ product.hsn_code if product else '1905' }}"
+                           class="input input-bordered w-full font-mono" placeholder="1905" />
+                </div>
+            </div>
+
+            <!-- Category + GST row -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">Category</span></label>
+                    <select name="category" class="select select-bordered w-full">
+                        {% for cat in ['Cake', 'Bread', 'Cookie', 'Pastry', 'Biscuit', 'Custom'] %}
+                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
+                            {{ cat }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">GST Rate (%)</span></label>
+                    <select name="gst_rate" class="select select-bordered w-full">
+                        {% for rate in [0, 5, 12, 18] %}
+                        <option value="{{ rate }}" {% if product and product.gst_rate == rate %}selected{% endif %}>
+                            {{ rate }}%
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Price + Prep Time row -->
+            <div class="grid grid-cols-2 gap-4">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">Base Price ({{ settings.currency }}) *</span></label>
+                    <input type="number" name="base_price" step="0.01" min="0"
+                           value="{{ product.base_price if product else '' }}"
+                           class="input input-bordered w-full" placeholder="500.00" required />
+                </div>
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-medium">Prep Time (hours)</span></label>
+                    <input type="number" name="prep_time_hours" min="0"
+                           value="{{ product.prep_time_hours if product else 4 }}"
+                           class="input input-bordered w-full" />
+                </div>
+            </div>
+
+            <!-- Description -->
+            <div class="form-control">
+                <label class="label"><span class="label-text font-medium">Description</span></label>
+                <textarea name="description" rows="3"
+                          class="textarea textarea-bordered w-full"
+                          placeholder="Rich chocolate truffle cake with ganache filling...">{{ product.description if product else '' }}</textarea>
+            </div>
+
+            <!-- Active toggle -->
+            <div class="form-control">
+                <label class="cursor-pointer gap-3">
+                    <input type="checkbox" name="is_active" value="1"
+                           {% if not product or product.is_active %}checked{% endif %}
+                           class="toggle toggle-primary" />
+                    <span class="font-medium">Active (visible in orders)</span>
+                </label>
+            </div>
+
+            <!-- Submit -->
+            <div class="flex gap-2 pt-2">
+                <button type="submit" class="btn btn-primary">
+                    {{ "Save Changes" if product else "Create Product" }}
+                </button>
+                <a href="/products" class="btn btn-ghost">Cancel</a>
+            </div>
+
+        </div>
+    </form>
+
+</div>
+{% endblock %}

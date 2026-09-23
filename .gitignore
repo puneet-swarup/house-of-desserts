@@ -1,0 +1,62 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Databases
+*.sqlite3
+*.db
+db.sqlite3
+db.sqlite3-journal
+
+# Django
+/media/
+/staticfiles/
+*.log
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data
+data/*.db
+data/*.db-wal
+data/*.db-shm
+backups/
+export/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Binaries / build tools
+*.exe
+*.dll
+*.so
+*.dylib
+tailwindcss
+tailwindcss.exe
