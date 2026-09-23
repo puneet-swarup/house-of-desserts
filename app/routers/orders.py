@@ -1,0 +1,122 @@
+from datetime import datetime
+from fastapi import APIRouter, Depends, Request, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
+
+from datetime import datetime
+
+from app.database import get_db
+from app.models import Customer, Product
+from app.services import order_service
+
+router = APIRouter()
+
+
+@router.get("/", response_class=HTMLResponse)
+def list_orders_page(request: Request, status: str = "ALL", db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+    orders = order_service.list_orders(db, status)
+    return templates.TemplateResponse(
+        request=request,
+        name="orders/list.html",
+        context={"settings": settings, "orders": orders, "filter": status},
+    )
+
+
+@router.get("/new", response_class=HTMLResponse)
+def new_order_form(request: Request, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+    customers = db.query(Customer).order_by(Customer.name).all()
+    products = db.query(Product).where(Product.is_active == True).order_by(Product.name).all()
+    return templates.TemplateResponse(
+        request=request,
+        name="orders/form.html",
+        context={
+            "settings": settings,
+            "customers": customers,
+            "products": products,
+            "today_date": datetime.now().strftime("%Y-%m-%d"),  # ← ADD
+        },
+    )
+
+
+@router.post("/", response_class=HTMLResponse)
+def create_order(
+    request: Request,
+    db: Session = Depends(get_db),
+    customer_id: int = Form(...),
+    delivery_type: str = Form("PICKUP"),
+    delivery_date: str = Form(None),
+    delivery_address: str = Form(None),
+    notes: str = Form(None),
+    advance_paid: float = Form(0),
+    advance_method: str = Form("UPI"),
+    product_id: list[int] = Form(...),
+    quantity: list[int] = Form(...),
+    order_date: str = Form(None),
+):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+
+    items = []
+    for pid, qty in zip(product_id, quantity):
+        items.append({"product_id": pid, "quantity": qty})
+
+    data = {
+        "customer_id": customer_id,
+        "order_date": order_date,  # ← this must be here
+        "delivery_type": delivery_type,
+        "delivery_date": datetime.fromisoformat(delivery_date) if delivery_date else None,
+        "delivery_address": delivery_address or None,
+        "notes": notes or None,
+        "items": items,
+        "advance_paid": advance_paid,
+        "advance_method": advance_method,
+    }
+
+    try:
+        order = order_service.create_order(db, data)
+    except Exception as e:
+        customers = db.query(Customer).order_by(Customer.name).all()
+        products = db.query(Product).where(Product.is_active == True).all()
+        return templates.TemplateResponse(
+            request=request,
+            name="orders/form.html",
+            context={"settings": settings, "customers": customers,
+                     "products": products, "error": str(e)},
+            status_code=400,
+        )
+
+    return RedirectResponse(url=f"/orders/{order.id}", status_code=303)
+
+
+@router.get("/{order_id}", response_class=HTMLResponse)
+def order_detail(request: Request, order_id: int, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+    order = order_service.get_order(db, order_id)
+    return templates.TemplateResponse(
+        request=request,
+        name="orders/detail.html",
+        context={"settings": settings, "order": order},
+    )
+
+
+@router.post("/{order_id}/status")
+def update_status(order_id: int, status: str = Form(...), db: Session = Depends(get_db)):
+    order_service.update_status(db, order_id, status)
+    return {"ok": True, "status": status}
+
+
+@router.post("/{order_id}/payments")
+def add_payment(
+    order_id: int,
+    db: Session = Depends(get_db),
+    amount: float = Form(...),
+    method: str = Form("UPI"),
+    reference: str = Form(None),
+):
+    order_service.record_payment(db, order_id, amount, method, reference)
+    return RedirectResponse(url=f"/orders/{order_id}", status_code=303)   

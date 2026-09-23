@@ -1,0 +1,23 @@
+{% if results %}
+{% for c in results %}
+{% set active_addrs = c.addresses | selectattr('is_active') | list %}
+{% set addr_json = active_addrs | map(attribute='id') | list | tojson %}
+<div class="flex items-center justify-between px-3 py-2 hover:bg-amber-50 cursor-pointer
+            border-b border-base-200 last:border-0 customer-result"
+     data-id="{{ c.id }}"
+     data-name="{{ c.name }}"
+     data-phone="{{ c.phone }}"
+     data-addr-ids="{{ active_addrs | map(attribute='id') | list | tojson | forceescape }}"
+     data-addr-labels="{{ active_addrs | map(attribute='label') | list | tojson | forceescape }}"
+     data-addr-lines="{{ active_addrs | map(attribute='line') | list | tojson | forceescape }}"
+     data-addr-defaults="{{ active_addrs | map(attribute='is_default') | list | tojson | forceescape }}">
+    <div>
+        <span class="font-medium text-sm">{{ c.name }}</span>
+        <span class="text-xs text-base-content/50 ml-2 font-mono">{{ c.phone }}</span>
+    </div>
+    <span class="badge badge-ghost badge-xs">{{ active_addrs | length }} addr</span>
+</div>
+{% endfor %}
+{% else %}
+<div class="px-3 py-3 text-sm text-base-content/50">No customers found for "{{ q }}"</div>
+{% endif %}

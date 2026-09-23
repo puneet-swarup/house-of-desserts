@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}Settings — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+
+    <h1 class="text-2xl font-extrabold text-amber-900">Settings</h1>
+    <p class="text-base-content/60 text-sm">Business details shown on invoices and receipts. Edit <code class="badge badge-ghost">.env</code> file to change these.</p>
+
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-4">
+
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Business Identity</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <p class="text-xs text-base-content/50">App Name</p>
+                    <p class="font-semibold">{{ settings.app_name }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">Tagline</p>
+                    <p class="font-semibold">{{ settings.app_tagline }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">Phone</p>
+                    <p class="font-semibold">{{ settings.phone or 'Not set' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">Email</p>
+                    <p class="font-semibold">{{ settings.email or 'Not set' }}</p>
+                </div>
+                <div class="sm:col-span-2">
+                    <p class="text-xs text-base-content/50">Address</p>
+                    <p class="font-semibold">{{ settings.address or 'Not set' }}</p>
+                </div>
+            </div>
+
+            <hr class="border-base-200" />
+
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Compliance</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <p class="text-xs text-base-content/50">FSSAI Number</p>
+                    <p class="font-semibold font-mono">{{ settings.fssai_number or 'Not set' }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">GSTIN</p>
+                    <p class="font-semibold font-mono">{{ settings.gstin or 'Not registered' }}</p>
+                </div>
+            </div>
+
+            <hr class="border-base-200" />
+
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Printer</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <p class="text-xs text-base-content/50">Type</p>
+                    <p class="font-semibold">{{ settings.printer_type.upper() }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">Paper Width</p>
+                    <p class="font-semibold">{{ settings.printer_width }}mm</p>
+                </div>
+                {% if settings.printer_device %}
+                <div class="sm:col-span-2">
+                    <p class="text-xs text-base-content/50">Device</p>
+                    <p class="font-semibold font-mono">{{ settings.printer_device }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <hr class="border-base-200" />
+
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Invoice Numbering</h2>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                    <p class="text-xs text-base-content/50">Prefix</p>
+                    <p class="font-semibold font-mono">{{ settings.invoice_prefix }}</p>
+                </div>
+                <div>
+                    <p class="text-xs text-base-content/50">Start Number</p>
+                    <p class="font-semibold">{{ settings.invoice_start_number }}</p>
+                </div>
+            </div>
+
+            <hr class="border-base-200" />
+
+            <div class="alert alert-info text-sm">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>To change any of these values, edit the <code>.env</code> file in the project root and restart the server.</span>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}

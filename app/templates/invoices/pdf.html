@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        @page { size: A4; margin: 2cm; }
+        body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; color: #1a1a1a; line-height: 1.5; }
+        .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid #d97706; }
+        .header h1 { font-size: 22px; color: #92400e; margin: 0; }
+        .header .biz-info { font-size: 11px; color: #6b7280; }
+        .invoice-meta { text-align: right; }
+        .invoice-meta h2 { font-size: 16px; margin: 0 0 4px; }
+        .info-grid { display: flex; gap: 16px; margin: 16px 0; }
+        .info-box { flex: 1; padding: 12px; border-radius: 6px; }
+        .info-box.bill-to { background: #fef3c7; }
+        .info-box.deliver-to { background: #ecfdf5; }
+        .info-box h3 { font-size: 10px; text-transform: uppercase; margin: 0 0 4px; }
+        .info-box.bill-to h3 { color: #92400e; }
+        .info-box.deliver-to h3 { color: #065f46; }
+        table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+        th { background: #fef3c7; padding: 8px; text-align: left; font-size: 10px; text-transform: uppercase; color: #92400e; border-bottom: 2px solid #d97706; }
+        td { padding: 8px; border-bottom: 1px solid #e5e7eb; font-size: 11px; }
+        .text-right { text-align: right; }
+        .totals { margin-top: 16px; margin-left: auto; width: 250px; }
+        .totals .row { display: flex; justify-content: space-between; padding: 4px 0; }
+        .totals .grand { font-size: 14px; font-weight: bold; border-top: 2px solid #d97706; padding-top: 8px; margin-top: 8px; }
+        .footer { margin-top: 40px; text-align: center; font-size: 10px; color: #9ca3af; border-top: 1px solid #e5e7eb; padding-top: 12px; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <h1>{{ settings.app_name }}</h1>
+        <div class="biz-info">
+            {% if settings.address %}{{ settings.address }}<br>{% endif %}
+            {% if settings.phone %}Phone: {{ settings.phone }}<br>{% endif %}
+            {% if settings.fssai_number %}FSSAI: {{ settings.fssai_number }}<br>{% endif %}
+            {% if settings.gstin %}GSTIN: {{ settings.gstin }}{% endif %}
+        </div>
+    </div>
+    <div class="invoice-meta">
+        <h2>TAX INVOICE</h2>
+        <p><strong>Invoice #:</strong> {{ invoice.invoice_number if invoice else 'DRAFT' }}</p>
+        <p><strong>Date:</strong> {{ order.order_date.strftime('%d %b %Y') }}</p>
+        <p><strong>Order #:</strong> {{ order.order_number }}</p>
+    </div>
+</div>
+
+<div class="info-grid">
+    <div class="info-box bill-to">
+        <h3>Bill To</h3>
+        <p><strong>{{ customer.name }}</strong></p>
+        <p>{{ customer.phone }}{% if customer.email %} · {{ customer.email }}{% endif %}</p>
+    </div>
+    {% if order.delivery_type == 'DELIVERY' and order.delivery_address %}
+    <div class="info-box deliver-to">
+        <h3>Deliver To</h3>
+        <p>{{ order.delivery_address }}</p>
+        {% if order.delivery_date %}<p>📅 {{ order.delivery_date.strftime('%d %b %Y') }}</p>{% endif %}
+    </div>
+    {% else %}
+    <div class="info-box deliver-to">
+        <h3>Pickup</h3>
+        <p>Customer will pick up</p>
+        {% if order.delivery_date %}<p>📅 {{ order.delivery_date.strftime('%d %b %Y') }}</p>{% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>#</th>
+            <th>Item</th>
+            <th>HSN</th>
+            <th class="text-right">Qty</th>
+            <th class="text-right">Rate</th>
+            <th class="text-right">GST</th>
+            <th class="text-right">Amount</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for item in items %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ item.product.name }}{% if item.customization_notes %}<br><small>({{ item.customization_notes }})</small>{% endif %}</td>
+            <td>{{ item.product.hsn_code }}</td>
+            <td class="text-right">{{ item.quantity }}</td>
+            <td class="text-right">{{ settings.currency }}{{ "{:,.2f}".format(item.unit_price) }}</td>
+            <td class="text-right">{{ settings.currency }}{{ "{:,.2f}".format(item.gst_amount) }}</td>
+            <td class="text-right"><strong>{{ settings.currency }}{{ "{:,.2f}".format(item.line_total) }}</strong></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<div class="totals">
+    <div class="row"><span>Subtotal</span><span>{{ settings.currency }}{{ "{:,.2f}".format(subtotal) }}</span></div>
+    <div class="row"><span>GST</span><span>{{ settings.currency }}{{ "{:,.2f}".format(gst_total) }}</span></div>
+    <div class="row grand"><span>Total</span><span>{{ settings.currency }}{{ "{:,.2f}".format(order.total_amount) }}</span></div>
+    <div class="row"><span>Paid</span><span>{{ settings.currency }}{{ "{:,.2f}".format(order.advance_paid) }}</span></div>
+    {% if order.balance_due > 0 %}
+    <div class="row"><span>Balance Due</span><span>{{ settings.currency }}{{ "{:,.2f}".format(order.balance_due) }}</span></div>
+    {% else %}
+    <div class="row"><span>Status</span><span style="color: green; font-weight: bold;">PAID IN FULL</span></div>
+    {% endif %}
+</div>
+
+<div class="footer">
+    <p>This is a computer-generated invoice. No signature required.</p>
+    <p>For queries contact: {{ settings.phone }} | {{ settings.app_name }}</p>
+</div>
+
+</body>
+</html>

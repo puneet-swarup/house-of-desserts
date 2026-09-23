@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if customer else "Add" }} Customer — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">{{ "Edit" if customer else "Add" }} Customer</h1>
+        <a href="/customers" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error text-sm py-3"><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ '/customers/' ~ customer.id ~ '/edit' if customer else '/customers' }}"
+          class="space-y-4" id="customer-form">
+
+        <!-- Customer Details -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer Details</h2>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Full Name *</span></label>
+                    <input type="text" name="name" value="{{ customer.name if customer else '' }}"
+                           class="input input-bordered w-full" placeholder="e.g., Priya Sharma" required />
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Phone *</span></label>
+                    <input type="tel" name="phone" value="{{ customer.phone if customer else '' }}"
+                           class="input input-bordered w-full font-mono" placeholder="+91 98765 43210" required />
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Email</span></label>
+                    <input type="email" name="email" value="{{ customer.email if customer else '' }}"
+                           class="input input-bordered w-full" placeholder="priya@example.com" />
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Notes / Preferences</span></label>
+                    <textarea name="notes" rows="2"
+                              class="textarea textarea-bordered w-full"
+                              placeholder="Allergic to nuts, prefers chocolate...">{{ customer.notes if customer else '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Addresses -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-sm font-semibold text-base-content/50 uppercase">Addresses</h2>
+                    <button type="button" onclick="addAddrRow()" class="btn btn-outline btn-xs btn-amber gap-1 font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                        </svg>
+                        Add Address
+                    </button>
+                </div>
+
+                <!-- Existing Addresses (edit mode only) -->
+                {% if customer %}
+                {% set active_addrs = customer.addresses | selectattr('is_active') | list %}
+                {% if active_addrs %}
+                <div class="space-y-3" id="existing-addresses">
+                    {% for addr in active_addrs %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300">
+                        <div class="flex items-center gap-2">
+                            <input type="text" name="addr_edit_{{ addr.id }}_label"
+                                   value="{{ addr.label }}"
+                                   class="input input-bordered input-sm w-20 shrink-0 font-semibold" />
+                            <input type="text" name="addr_edit_{{ addr.id }}_line"
+                                   value="{{ addr.line }}"
+                                   class="input input-bordered input-sm flex-1" />
+                            <label class="cursor-pointer flex items-center gap-1 shrink-0" title="Default">
+                                <input type="checkbox" {% if addr.is_default %}checked{% endif %}
+                                       class="toggle toggle-sm toggle-amber"
+                                       onchange="setDefault({{ customer.id }}, {{ addr.id }}, this.checked)" />
+                                <span class="text-[10px] text-base-content/50">Def</span>
+                            </label>
+                            <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
+                                    onclick="softDelete({{ customer.id }}, {{ addr.id }})">✕</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endif %}
+
+                <!-- New Address Rows (dynamically added) -->
+                <div id="new-addresses-container" class="space-y-3">
+                    <!-- One row by default on create, none on edit -->
+                    {% if not customer %}
+                    <div class="flex gap-2 items-center addr-new-row">
+                        <input type="text" name="addr_new_label" class="input input-bordered input-sm w-20"
+                               placeholder="Label" value="Home" />
+                        <input type="text" name="addr_new_line" class="input input-bordered input-sm flex-1"
+                               placeholder="Full address..." />
+                        <label class="cursor-pointer gap-1 flex items-center shrink-0">
+                            <input type="checkbox" name="addr_new_default" value="1" class="toggle toggle-sm toggle-primary" />
+                            <span class="text-[10px]">Def</span>
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
+                                onclick="this.closest('.addr-new-row').remove()">✕</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Template for JS to clone -->
+                <template id="addr-row-template">
+                    <div class="flex gap-2 items-center addr-new-row">
+                        <input type="text" name="addr_new_label" class="input input-bordered input-sm w-20"
+                               placeholder="Label" value="Home" />
+                        <input type="text" name="addr_new_line" class="input input-bordered input-sm flex-1"
+                               placeholder="Full address..." />
+                        <label class="cursor-pointer gap-1 flex items-center shrink-0">
+                            <input type="checkbox" name="addr_new_default" value="1" class="toggle toggle-sm toggle-primary" />
+                            <span class="text-[10px]">Def</span>
+                        </label>
+                        <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
+                                onclick="this.closest('.addr-new-row').remove()">✕</button>
+                    </div>
+                </template>
+
+            </div>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-3">
+            <button type="submit" class="btn btn-primary btn-md gap-2 font-bold shadow-md hover:shadow-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                </svg>
+                {{ "Save Changes" if customer else "Add Customer" }}
+            </button>
+            <a href="/customers" class="btn btn-ghost btn-md font-semibold text-base-content/60">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const customerId = {{ customer.id if customer else 0 }};
+
+// Add a new address row (same pattern as order items)
+function addAddrRow() {
+    const template = document.getElementById('addr-row-template');
+    const clone = template.content.cloneNode(true);
+    document.getElementById('new-addresses-container').appendChild(clone);
+}
+
+// Set default via AJAX
+function setDefault(cid, addrId, checked) {
+    if (!checked) return; // Only act on toggle ON (turning off is handled by "only one default" logic)
+    fetch(`/customers/${cid}/addresses/${addrId}/set-default`, { method: 'POST' })
+        .then(r => { if (r.ok) location.reload(); });
+}
+
+// Soft delete via AJAX
+function softDelete(cid, addrId, btn) {
+    if (!confirm('Remove this address?')) return;
+    fetch(`/customers/${cid}/addresses/${addrId}/delete`, { method: 'POST' })
+        .then(r => { if (r.ok) location.reload(); });
+}
+// Only one "Def" checkbox can be checked at a time (across ALL rows)
+document.addEventListener('change', function(e) {
+    if (e.target.name === 'addr_new_default') {
+        if (e.target.checked) {
+            // Uncheck all other "Def" checkboxes
+            document.querySelectorAll('input[name="addr_new_default"]').forEach(cb => {
+                if (cb !== e.target) cb.checked = false;
+            });
+        }
+    }
+});
+</script>
+{% endblock %}
