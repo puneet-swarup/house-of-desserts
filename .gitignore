@@ -60,3 +60,11 @@ node_modules/
 *.dylib
 tailwindcss
 tailwindcss.exe
+
+# Runtime data artifacts
+data/invoices/
+data/receipt_preview.bin
+data/test_ui.db
+data/test_ui.db-wal
+data/test_ui.db-shm
+backups/
