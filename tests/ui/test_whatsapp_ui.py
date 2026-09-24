@@ -1,14 +1,22 @@
 """UI tests: WhatsApp message modal."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import expect
+
+from app.config import get_settings
+
+
+def _today_fulfillment() -> str:
+    tz = ZoneInfo(get_settings().business_timezone)
+    return datetime.now(tz).strftime("%Y-%m-%d") + "T15:00"
 
 
 def _create_order(app_page, live_server, seeded):
     app_page.goto(live_server + "/orders/new")
     app_page.select_option("#customer_id", str(seeded["customer_id"]))
-    app_page.fill('input[name="fulfillment_date"]', datetime.now().strftime("%Y-%m-%d") + "T15:00")
+    app_page.fill('input[name="fulfillment_date"]', _today_fulfillment())
     app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
     app_page.fill('input[name="quantity"]', "1")
     app_page.click('button[type="submit"]')
