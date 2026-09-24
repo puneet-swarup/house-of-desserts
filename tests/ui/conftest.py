@@ -124,12 +124,19 @@ def seeded(live_server):
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.database import Base
+
     # Import models purely to get Base.metadata populated.
     # The engine inside app.database is irrelevant here — we make our own.
     from app.models import (  # noqa: F401
-        Address, Customer, Invoice, Order, OrderItem, Payment, Product,
+        Address,
+        Customer,
+        Invoice,
+        Order,
+        OrderItem,
+        Payment,
+        Product,
     )
-    from app.database import Base
 
     engine = create_engine(f"sqlite:///{TEST_DB}")
     Session = sessionmaker(bind=engine)
