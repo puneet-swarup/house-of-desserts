@@ -21,8 +21,10 @@ def test_order_numbers_sequential(db):
 def test_invoice_number_gapless(db, customer, product):
     from app.services.invoice_service import create_invoice
     o1 = create_order(db, {"customer_id": customer.id,
+                           "fulfillment_date": "2026-12-31T12:00",
                            "items": [{"product_id": product.id, "quantity": 1}]})
     o2 = create_order(db, {"customer_id": customer.id,
+                           "fulfillment_date": "2026-12-31T12:00",
                            "items": [{"product_id": product.id, "quantity": 1}]})
     i1 = create_invoice(db, o1.id)
     i2 = create_invoice(db, o2.id)
@@ -33,6 +35,7 @@ def test_invoice_number_gapless(db, customer, product):
 def test_duplicate_order_number_rejected(db, customer, product):
     from sqlalchemy.exc import IntegrityError
     o = create_order(db, {"customer_id": customer.id,
+                          "fulfillment_date": "2026-12-31T12:00",
                           "items": [{"product_id": product.id, "quantity": 1}]})
     dup = Order(order_number=o.order_number, customer_id=customer.id)
     db.add(dup)

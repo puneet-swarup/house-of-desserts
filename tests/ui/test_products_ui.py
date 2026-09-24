@@ -1,55 +1,44 @@
-"""UI tests: Product CRUD via browser."""
+"""UI tests: Product CRUD, SKU generation."""
+
+from playwright.sync_api import expect
 
 
-def test_add_product_via_ui(page):
-    # Navigate to products
-    page.click("a[href='/products']")
-    page.wait_for_timeout(500)
+def test_add_product_via_ui(app_page, seeded, live_server):
+    app_page.goto(live_server + "/products/new")
 
-    # Click Add Product
-    page.click("a[href='/products/new']")
-    page.wait_for_timeout(500)
+    app_page.fill('input[name="name"]', "UI Created Cake")
+    app_page.fill('input[name="base_price"]', "450")
+    app_page.select_option('select[name="category"]', "Cake")
+    app_page.click('button[type="submit"]')
 
-    # Fill form
-    page.fill('input[name="name"]', "UI Test Cake")
-    page.fill('input[name="sku"]', "UI-TEST-001")
-    page.fill('input[name="base_price"]', "350")
-    page.select_option('select[name="category"]', "Cake")
-
-    # Submit
-    page.click('button[type="submit"]')
-    page.wait_for_timeout(500)
-
-    # Verify it appears in the list
-    assert "UI Test Cake" in page.content()
-    assert "UI-TEST-001" in page.content()
+    # Text appears in both the desktop table and the mobile card; either is fine
+    expect(app_page.locator("text=UI Created Cake").first).to_be_visible(timeout=8000)
 
 
-def test_product_card_shows_correct_details(page):
-    page.click("a[href='/products']")
-    page.wait_for_timeout(500)
+def test_product_sku_autogenerates(app_page, seeded, live_server):
+    app_page.goto(live_server + "/products/new")
+    app_page.fill('input[name="name"]', "Chocolate Truffle Cake")
+    app_page.fill('input[name="measure_value"]', "500")
+    app_page.select_option('select[name="measure_unit"]', "g")
 
-    # If we just created it, it should be visible
-    if "UI Test Cake" in page.content():
-        card = page.locator("text=UI Test Cake").first
-        assert card.is_visible()
-        # Check price is shown
-        parent = card.locator("..").locator("..").locator("..")
-        assert "350" in parent.text_content()
+    app_page.wait_for_timeout(300)
+
+    sku = app_page.locator('input[name="sku"]').input_value()
+    assert "CHOCOLATE" in sku.upper()
+    assert "500G" in sku.upper()
 
 
-def test_delete_product_via_ui(page):
-    page.click("a[href='/products']")
-    page.wait_for_timeout(500)
+def test_seeded_product_visible_in_list(app_page, seeded, live_server):
+    app_page.goto(live_server + "/products")
+    expect(app_page.locator(f"text={seeded['product_sku']}").first).to_be_visible(timeout=8000)
 
-    # Find the delete button on our test product card
-    if "UI Test Cake" in page.content():
-        # Click the delete button in that card
-        card = page.locator("div.card", has_text="UI Test Cake").first
-        card.click("button:has-text('Delete')")
-        # Accept the confirm dialog
-        page.on("dialog", lambda d: d.accept())
-        page.wait_for_timeout(500)
 
-        # Product should now show "Inactive" badge
-        assert "Inactive" in page.content()
+def test_delete_product_via_ui(app_page, seeded, live_server):
+    app_page.goto(live_server + "/products")
+
+    app_page.on("dialog", lambda d: d.accept())
+
+    # Click the first visible Delete button
+    app_page.locator("button:has-text('Delete')").first.click()
+
+    expect(app_page.locator("text=Inactive").first).to_be_visible(timeout=8000)

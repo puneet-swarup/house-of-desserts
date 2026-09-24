@@ -10,6 +10,7 @@ from app.services.order_service import create_order, update_status
 def _new_order(db, customer, product, advance=0):
     return create_order(db, {
         "customer_id": customer.id,
+        "fulfillment_date": "2026-12-31T12:00",
         "items": [{"product_id": product.id, "quantity": 1}],
         "advance_paid": advance,
     })

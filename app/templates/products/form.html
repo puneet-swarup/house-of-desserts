@@ -9,98 +9,261 @@
         <a href="/products" class="btn btn-ghost btn-sm">← Back</a>
     </div>
 
-    <form method="post" action="{{ '/products/' ~ product.id ~ '/edit' if product else '/products' }}"
-          class="card bg-base-100 shadow-sm">
-        <div class="card-body space-y-4">
+    {% if error %}
+    <div class="alert alert-error text-sm py-3"><span>{{ error }}</span></div>
+    {% endif %}
 
-            <!-- Name -->
-            <div class="form-control">
-                <label class="label"><span class="label-text font-medium">Name *</span></label>
-                <input type="text" name="name" value="{{ product.name if product else '' }}"
-                       class="input input-bordered w-full" placeholder="e.g., Choco Truffle Cake" required />
-            </div>
+    <form method="post"
+          action="{{ '/products/' ~ product.id ~ '/edit' if product else '/products' }}"
+          class="space-y-4" id="product-form">
 
-            <!-- SKU + HSN row -->
-            <div class="grid grid-cols-2 gap-4">
+        <!-- Identity -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Product</h2>
+
                 <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">SKU *</span></label>
-                    <input type="text" name="sku" value="{{ product.sku if product else '' }}"
-                           class="input input-bordered w-full font-mono" placeholder="e.g., CHOC-TRUFFLE-500G" required />
+                    <label class="label"><span class="label-text font-semibold">Name *</span></label>
+                    <input type="text" name="name" id="p-name"
+                           value="{{ product.name if product else (form_data.name if form_data else '') }}"
+                           class="input input-bordered w-full" placeholder="e.g., Chocolate Truffle Cake" required />
                 </div>
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">HSN Code</span></label>
-                           class="input input-bordered w-full font-mono" placeholder="1905" />
-                </div>
-            </div>
 
-            <!-- Category + GST row -->
-            <div class="grid grid-cols-2 gap-4">
                 <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">Category</span></label>
+                    <label class="label flex justify-between">
+                        <span class="label-text font-semibold">SKU *</span>
+                        <span class="label-text-alt text-xs" id="sku-status"></span>
+                    </label>
+                    <input type="text" name="sku" id="p-sku"
+                           value="{{ product.sku if product else (form_data.sku if form_data else '') }}"
+                           class="input input-bordered w-full font-mono uppercase"
+                           placeholder="Auto-generated from name, weight, pack"
+                           data-product-id="{{ product.id if product else '' }}" />
+                    <label class="label">
+                        <span class="label-text-alt text-xs text-base-content/60">
+                            Leave blank to auto-generate. Format: <code class="font-mono">NAME-WEIGHT-PACK</code>. Must be unique.
+                        </span>
+                    </label>
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Category</span></label>
                     <select name="category" class="select select-bordered w-full">
+                        {% set cur_cat = product.category if product else (form_data.category if form_data else 'Cake') %}
                         {% for cat in ['Cake', 'Bread', 'Cookie', 'Pastry', 'Biscuit', 'Custom'] %}
-                        <option value="{{ cat }}" {% if product and product.category == cat %}selected{% endif %}>
-                            {{ cat }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">GST Rate (%)</span></label>
-                    <select name="gst_rate" class="select select-bordered w-full">
-                        {% for rate in [0, 5, 12, 18] %}
-                        <option value="{{ rate }}" {% if product and product.gst_rate == rate %}selected{% endif %}>
-                            {{ rate }}%
-                        </option>
+                        <option value="{{ cat }}" {% if cur_cat == cat %}selected{% endif %}>{{ cat }}</option>
                         {% endfor %}
                     </select>
                 </div>
             </div>
+        </div>
 
-            <!-- Price + Prep Time row -->
-            <div class="grid grid-cols-2 gap-4">
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">Base Price ({{ settings.currency }}) *</span></label>
-                    <input type="number" name="base_price" step="0.01" min="0"
-                           value="{{ product.base_price if product else '' }}"
-                           class="input input-bordered w-full" placeholder="500.00" required />
+        <!-- Measure + Pack -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Size / Pack</h2>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Weight / Volume</span></label>
+                        <input type="number" step="0.01" min="0" name="measure_value" id="p-measure-value"
+                               value="{{ product.measure_value if product and product.measure_value is not none else (form_data.measure_value if form_data else '') }}"
+                               class="input input-bordered w-full" placeholder="e.g., 500" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Unit</span></label>
+                        {% set cur_unit = product.measure_unit if product else (form_data.measure_unit if form_data else '') %}
+                        <select name="measure_unit" id="p-measure-unit" class="select select-bordered w-full">
+                            <option value="">—</option>
+                            <option value="g"  {% if cur_unit == 'g'  %}selected{% endif %}>g (grams)</option>
+                            <option value="kg" {% if cur_unit == 'kg' %}selected{% endif %}>kg (kilograms)</option>
+                            <option value="ml" {% if cur_unit == 'ml' %}selected{% endif %}>ml (millilitres)</option>
+                            <option value="l"  {% if cur_unit == 'l'  %}selected{% endif %}>l (litres)</option>
+                            <option value="pcs"{% if cur_unit == 'pcs'%}selected{% endif %}>pcs (pieces)</option>
+                        </select>
+                    </div>
                 </div>
+                <p class="text-xs text-base-content/60 -mt-2">
+                    Optional. Leave blank for items without a standard size.
+                </p>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Pack size</span></label>
+                        <input type="number" min="1" step="1" name="pack_size" id="p-pack-size"
+                               value="{{ product.pack_size if product else (form_data.pack_size if form_data else 1) }}"
+                               class="input input-bordered w-full" />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Pack label</span></label>
+                        <input type="text" name="pack_label" id="p-pack-label"
+                               value="{{ product.pack_label if product else (form_data.pack_label if form_data else '') }}"
+                               class="input input-bordered w-full" placeholder="e.g., Pack of 6" />
+                    </div>
+                </div>
+                <p class="text-xs text-base-content/60 -mt-2">
+                    Pack size 1 = single item. Pack label overrides display if set.
+                </p>
+            </div>
+        </div>
+
+        <!-- Pricing -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Pricing</h2>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Base Price ({{ settings.currency }}) *</span></label>
+                        <input type="number" step="0.01" min="0" name="base_price"
+                               value="{{ product.base_price if product else (form_data.base_price if form_data else '') }}"
+                               class="input input-bordered w-full" placeholder="499.00" required />
+                    </div>
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">GST %</span></label>
+                        {% set cur_gst = product.gst_rate if product else (form_data.gst_rate if form_data else 5) %}
+                        <select name="gst_rate" class="select select-bordered w-full">
+                            {% for rate in [0, 5, 12, 18] %}
+                            <option value="{{ rate }}" {% if cur_gst|string == rate|string %}selected{% endif %}>{{ rate }}%</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
                 <div class="form-control">
-                    <label class="label"><span class="label-text font-medium">Prep Time (hours)</span></label>
-                    <input type="number" name="prep_time_hours" min="0"
-                           value="{{ product.prep_time_hours if product else 4 }}"
+                    <label class="label"><span class="label-text font-semibold">Prep time (hours)</span></label>
+                    <input type="number" min="0" name="prep_time_hours"
+                           value="{{ product.prep_time_hours if product else (form_data.prep_time_hours if form_data else 4) }}"
                            class="input input-bordered w-full" />
                 </div>
             </div>
+        </div>
 
-            <!-- Description -->
-            <div class="form-control">
-                <label class="label"><span class="label-text font-medium">Description</span></label>
-                <textarea name="description" rows="3"
-                          class="textarea textarea-bordered w-full"
-                          placeholder="Rich chocolate truffle cake with ganache filling...">{{ product.description if product else '' }}</textarea>
-            </div>
+        <!-- Description -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">More</h2>
 
-            <!-- Active toggle -->
-            <div class="form-control">
-                <label class="cursor-pointer gap-3">
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Description</span></label>
+                    <textarea name="description" rows="3" class="textarea textarea-bordered w-full"
+                              placeholder="Rich chocolate truffle with ganache filling...">{{ (product.description if product else (form_data.description if form_data else '')) or '' }}</textarea>
+                </div>
+
+                <label class="cursor-pointer flex items-center gap-3">
+                    <input type="hidden" name="is_active" value="0" />
                     <input type="checkbox" name="is_active" value="1"
                            {% if not product or product.is_active %}checked{% endif %}
                            class="toggle toggle-primary" />
                     <span class="font-medium">Active (visible in orders)</span>
                 </label>
             </div>
+        </div>
 
-            <!-- Submit -->
-            <div class="flex gap-2 pt-2">
-                <button type="submit" class="btn btn-primary">
-                    {{ "Save Changes" if product else "Create Product" }}
-                </button>
-                <a href="/products" class="btn btn-ghost">Cancel</a>
-            </div>
-
+        <div class="flex gap-2">
+            <button type="submit" class="btn btn-primary">{{ "Save Changes" if product else "Create Product" }}</button>
+            <a href="/products" class="btn btn-ghost">Cancel</a>
         </div>
     </form>
-
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    const nameInput = document.getElementById('p-name');
+    const skuInput = document.getElementById('p-sku');
+    const measureValue = document.getElementById('p-measure-value');
+    const measureUnit = document.getElementById('p-measure-unit');
+    const packSize = document.getElementById('p-pack-size');
+    const status = document.getElementById('sku-status');
+    const productId = skuInput.dataset.productId || '';
+
+    // If editing an existing product with a SKU, treat SKU as user-managed
+    // until they clear the field.
+    let skuManuallyEdited = !!skuInput.value;
+
+    function slugify(name) {
+        let s = (name || '').toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        s = s.slice(0, 15).replace(/-+$/, '');
+        return s || 'PROD';
+    }
+
+    function normalizeMeasure(v, u) {
+        if (!v || !u) return null;
+        let num = parseFloat(v);
+        if (isNaN(num) || num <= 0) return null;
+        let unit = u.toLowerCase();
+        if (unit === 'kg' && num < 1) { num = num * 1000; unit = 'g'; }
+        else if (unit === 'g' && num >= 1000) { num = num / 1000; unit = 'kg'; }
+        else if (unit === 'l' && num < 1) { num = num * 1000; unit = 'ml'; }
+        else if (unit === 'ml' && num >= 1000) { num = num / 1000; unit = 'l'; }
+        const rounded = Math.round(num * 1000) / 1000;
+        return `${rounded}${unit.toUpperCase()}`;
+    }
+
+    function buildSku() {
+        const parts = [slugify(nameInput.value)];
+        const m = normalizeMeasure(measureValue.value, measureUnit.value);
+        if (m) parts.push(m);
+        const pk = parseInt(packSize.value || '1', 10);
+        if (pk && pk > 1) parts.push(pk + 'PK');
+        return parts.join('-');
+    }
+
+    let checkTimer = null;
+    function checkSku(sku) {
+        if (!sku) { status.textContent = ''; status.className = 'label-text-alt text-xs'; return; }
+        clearTimeout(checkTimer);
+        status.textContent = '…';
+        status.className = 'label-text-alt text-xs text-base-content/50';
+        const url = `/products/check-sku?sku=${encodeURIComponent(sku)}` +
+                    (productId ? `&exclude_id=${productId}` : '');
+        checkTimer = setTimeout(async () => {
+            try {
+                const r = await fetch(url);
+                const d = await r.json();
+                if (d.available) {
+                    status.textContent = '✓ available';
+                    status.className = 'label-text-alt text-xs text-success';
+                } else {
+                    status.textContent = d.reason === 'invalid' ? '✗ invalid characters' : '✗ already taken';
+                    status.className = 'label-text-alt text-xs text-error';
+                }
+            } catch {
+                status.textContent = '';
+            }
+        }, 250);
+    }
+
+    function updateSku() {
+        if (!skuManuallyEdited) {
+            skuInput.value = buildSku();
+        }
+        checkSku(skuInput.value);
+    }
+
+    // User typing in SKU = manual mode
+    skuInput.addEventListener('input', () => {
+        skuManuallyEdited = skuInput.value.trim().length > 0;
+        checkSku(skuInput.value.trim().toUpperCase());
+    });
+    skuInput.addEventListener('blur', () => {
+        skuInput.value = skuInput.value.trim().toUpperCase().replace(/[^A-Z0-9-]+/g, '-').replace(/^-+|-+$/g, '');
+        checkSku(skuInput.value);
+    });
+
+    // Auto-regen when source fields change and SKU is not manual
+    [nameInput, measureValue, measureUnit, packSize].forEach(el => {
+        el.addEventListener('input', updateSku);
+        el.addEventListener('change', updateSku);
+    });
+
+    // Initial
+    if (!skuInput.value) {
+        skuInput.value = buildSku();
+    }
+    checkSku(skuInput.value);
+})();
+</script>
 {% endblock %}

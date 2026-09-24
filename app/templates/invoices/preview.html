@@ -1,28 +1,24 @@
 {% extends "base.html" %}
-{% block title %}Invoice {{ invoice.invoice_number if invoice else '' }} — {{ settings.app_name }}{% endblock %}
+{% block title %}Invoice {{ invoice.invoice_number }} — {{ settings.app_name }}{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-4">
+<div class="max-w-3xl mx-auto space-y-4">
 
     <div class="flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-2xl font-extrabold text-amber-900">Invoice Preview</h1>
         <div class="flex gap-2 flex-wrap">
-            <a href="/orders/{{ order.id }}" class="btn btn-ghost btn-sm">← Back to Order</a>
-            <a href="/invoices/orders/{{ order.id }}/generate-pdf" class="btn btn-primary btn-sm gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-                </svg>
+            <a href="/orders/{{ invoice.order_id }}" class="btn btn-ghost btn-sm">← Back to Order</a>
+            <a href="/invoices/orders/{{ invoice.order_id }}/generate-pdf" class="btn btn-primary btn-sm">
                 Download PDF
             </a>
-            <form action="/invoices/orders/{{ order.id }}/print-receipt" method="post">
-                <button type="submit" class="btn btn-amber btn-sm gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
-                    </svg>
-                    Print Receipt
-                </button>
+            <form action="/invoices/orders/{{ invoice.order_id }}/print-receipt" method="post">
+                <button type="submit" class="btn btn-amber btn-sm">Print Receipt</button>
             </form>
         </div>
+    </div>
+
+    <div class="alert alert-info text-sm">
+        <span>This is an immutable snapshot as of {{ invoice.invoice_date|dt }}. Later edits to the order or customer will not change it.</span>
     </div>
 
     <!-- Invoice Document -->
@@ -30,118 +26,129 @@
         <div class="card-body p-6 md:p-8">
 
             <!-- Header -->
-            <div class="flex justify-between items-start mb-6">
+            <div class="flex justify-between items-start mb-6 flex-wrap gap-3">
                 <div>
-                    <h2 class="text-2xl font-extrabold text-amber-900">{{ settings.app_name }}</h2>
-                    {% if settings.address %}<p class="text-sm text-base-content/60">{{ settings.address }}</p>{% endif %}
-                    {% if settings.phone %}<p class="text-sm text-base-content/60">{{ settings.phone }}</p>{% endif %}
-                    {% if settings.fssai_number %}<p class="text-sm text-base-content/60">FSSAI: {{ settings.fssai_number }}</p>{% endif %}
-                    {% if settings.gstin %}<p class="text-sm text-base-content/60">GSTIN: {{ settings.gstin }}</p>{% endif %}
+                    <h2 class="text-2xl font-extrabold text-amber-900">{{ invoice.business_name }}</h2>
+                    {% if invoice.business_address %}<p class="text-sm text-base-content/60">{{ invoice.business_address }}</p>{% endif %}
+                    {% if invoice.business_phone %}<p class="text-sm text-base-content/60">{{ invoice.business_phone }}</p>{% endif %}
+                    {% if invoice.business_fssai %}<p class="text-sm text-base-content/60">FSSAI: {{ invoice.business_fssai }}</p>{% endif %}
+                    {% if invoice.business_gstin %}<p class="text-sm text-base-content/60">GSTIN: {{ invoice.business_gstin }}</p>{% endif %}
                 </div>
                 <div class="text-right">
                     <h3 class="text-lg font-bold">TAX INVOICE</h3>
-                    <p class="font-mono text-sm">{{ invoice.invoice_number if invoice else 'DRAFT' }}</p>
-                    <p class="text-sm text-base-content/60">{{ order.order_date.strftime('%d %b %Y') }}</p>
+                    <p class="font-mono text-sm">{{ invoice.invoice_number }}</p>
+                    <p class="text-sm text-base-content/60">{{ invoice.invoice_date|d }}</p>
+                    <p class="text-xs text-base-content/50 mt-1">Order: {{ invoice.order_number }}</p>
                 </div>
             </div>
 
             <hr class="border-amber-200" />
 
-            <!-- Bill To + Delivery -->
+            <!-- Bill To + Fulfillment -->
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-4">
                 <div class="p-3 rounded-lg bg-amber-50">
                     <p class="text-xs font-semibold text-amber-800 uppercase mb-1">Bill To</p>
-                    <p class="font-semibold">{{ customer.name }}</p>
-                    <p class="text-sm">{{ customer.phone }}</p>
-                    {% if customer.email %}<p class="text-sm text-base-content/60">{{ customer.email }}</p>{% endif %}
-                    {% set default_addr = customer.addresses | selectattr('is_default') | first %}
-                    {% if default_addr %}
-                    <p class="text-sm text-base-content/60 mt-1">{{ default_addr.line }}</p>
-                    {% elif customer.addresses %}
-                    <p class="text-sm text-base-content/60 mt-1">{{ customer.addresses[0].line }}</p>
+                    <p class="font-semibold">{{ invoice.billed_to_name }}</p>
+                    <p class="text-sm">{{ invoice.billed_to_phone }}</p>
+                    {% if invoice.billed_to_email %}
+                    <p class="text-sm text-base-content/60">{{ invoice.billed_to_email }}</p>
+                    {% endif %}
+                    {% if invoice.billed_to_address %}
+                    <p class="text-sm text-base-content/60 mt-1 whitespace-pre-line">{{ invoice.billed_to_address }}</p>
                     {% endif %}
                 </div>
-                {% if order.delivery_type == 'DELIVERY' and order.delivery_address %}
+
+                {% if invoice.delivery_type == 'DELIVERY' and invoice.delivery_address %}
                 <div class="p-3 rounded-lg bg-green-50">
                     <p class="text-xs font-semibold text-green-800 uppercase mb-1">Deliver To</p>
-                    <p class="text-sm">{{ order.delivery_address }}</p>
-                    {% if order.delivery_date %}
-                    <p class="text-xs text-base-content/60 mt-1">📅 {{ order.delivery_date.strftime('%d %b %Y') }}</p>
+                    <p class="text-sm whitespace-pre-line">{{ invoice.delivery_address }}</p>
+                    {% if invoice.fulfillment_date %}
+                    <p class="text-xs text-base-content/60 mt-1">Ready: {{ invoice.fulfillment_date|dt }}</p>
                     {% endif %}
                 </div>
                 {% else %}
                 <div class="p-3 rounded-lg bg-base-100 border border-base-200">
                     <p class="text-xs font-semibold text-base-content/50 uppercase mb-1">Pickup</p>
                     <p class="text-sm text-base-content/60">Customer will pick up</p>
-                    {% if order.delivery_date %}
-                    <p class="text-xs text-base-content/60 mt-1">📅 {{ order.delivery_date.strftime('%d %b %Y') }}</p>
+                    {% if invoice.fulfillment_date %}
+                    <p class="text-xs text-base-content/60 mt-1">Ready: {{ invoice.fulfillment_date|dt }}</p>
                     {% endif %}
                 </div>
                 {% endif %}
             </div>
 
-            <!-- Items Table -->
-            <table class="table table-sm w-full">
-                <thead>
-                    <tr class="text-xs uppercase text-base-content/50">
-                        <th>#</th>
-                        <th>Item</th>
-<th class="text-right">Qty</th>
-                        <th class="text-right">Rate</th>
-                        <th class="text-right">GST</th>
-                        <th class="text-right">Amount</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in items %}
-                    <tr>
-                        <td class="text-sm">{{ loop.index }}</td>
-                        <td class="text-sm">
-                            {{ item.product.name }}
-                            {% if item.customization_notes %}
-                            <br><span class="text-xs text-base-content/50">{{ item.customization_notes }}</span>
-                            {% endif %}
-                        </td>
-<td class="text-right text-sm">{{ item.quantity }}</td>
-                        <td class="text-right text-sm">{{ settings.currency }}{{ "{:,.2f}".format(item.unit_price) }}</td>
-                        <td class="text-right text-sm">{{ settings.currency }}{{ "{:,.2f}".format(item.gst_amount) }}</td>
-                        <td class="text-right text-sm font-semibold">{{ settings.currency }}{{ "{:,.2f}".format(item.line_total) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+            <!-- Items -->
+            <div class="overflow-x-auto">
+                <table class="table table-sm w-full">
+                    <thead>
+                        <tr class="text-xs uppercase text-base-content/50">
+                            <th>#</th>
+                            <th>Item</th>
+                            <th class="text-right">Qty</th>
+                            <th class="text-right">Rate</th>
+                            <th class="text-right">GST</th>
+                            <th class="text-right">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="text-sm">{{ loop.index }}</td>
+                            <td class="text-sm">
+                                {{ item.product_name }}
+                                {% if item.customization_notes %}
+                                <br><span class="text-xs text-base-content/50">{{ item.customization_notes }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-right text-sm">{{ item.quantity }}</td>
+                            <td class="text-right text-sm">{{ item.unit_price|money }}</td>
+                            <td class="text-right text-sm">{{ item.gst_amount|money }}</td>
+                            <td class="text-right text-sm font-semibold">{{ item.line_total|money }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
 
             <!-- Totals -->
             <div class="flex justify-end mt-4">
                 <div class="w-64 space-y-1">
                     <div class="flex justify-between text-sm">
                         <span>Subtotal</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(subtotal) }}</span>
+                        <span>{{ invoice.subtotal|money }}</span>
                     </div>
-                    {% if settings.gstin and gst_total > 0 %}
-                    {% set half_rate = items[0].product.gst_rate / 2 %}
-                    <div class="flex justify-between text-sm">
-                        <span>CGST @ {{ half_rate }}%</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(gst_total / 2) }}</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span>SGST @ {{ half_rate }}%</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(gst_total / 2) }}</span>
-                    </div>
+
+                    {% if invoice.business_gstin and invoice.gst_total > 0 %}
+                        {% set half = (invoice.gst_total / 2) %}
+                        <div class="flex justify-between text-sm">
+                            <span>CGST</span>
+                            <span>{{ half|money }}</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span>SGST</span>
+                            <span>{{ (invoice.gst_total - half)|money }}</span>
+                        </div>
+                    {% elif invoice.gst_total > 0 %}
+                        <div class="flex justify-between text-sm">
+                            <span>GST</span>
+                            <span>{{ invoice.gst_total|money }}</span>
+                        </div>
                     {% endif %}
+
                     <hr class="border-amber-200" />
+
                     <div class="flex justify-between font-bold text-lg">
                         <span>Total</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(order.total_amount) }}</span>
+                        <span>{{ invoice.total_amount|money }}</span>
                     </div>
                     <div class="flex justify-between text-sm text-success">
                         <span>Paid</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(order.advance_paid) }}</span>
+                        <span>{{ invoice.advance_paid|money }}</span>
                     </div>
-                    {% if order.balance_due > 0 %}
+                    {% if invoice.balance_due > 0 %}
                     <div class="flex justify-between text-sm text-error font-semibold">
                         <span>Balance Due</span>
-                        <span>{{ settings.currency }}{{ "{:,.2f}".format(order.balance_due) }}</span>
+                        <span>{{ invoice.balance_due|money }}</span>
                     </div>
                     {% else %}
                     <div class="flex justify-between text-sm text-success font-semibold">
@@ -155,7 +162,9 @@
             <!-- Footer -->
             <div class="mt-8 pt-4 border-t border-base-200 text-center">
                 <p class="text-xs text-base-content/40">This is a computer-generated invoice. No signature required.</p>
-                <p class="text-xs text-base-content/40 mt-1">For queries contact: {{ settings.phone }}</p>
+                {% if invoice.business_phone %}
+                <p class="text-xs text-base-content/40 mt-1">For queries contact: {{ invoice.business_phone }}</p>
+                {% endif %}
             </div>
 
         </div>

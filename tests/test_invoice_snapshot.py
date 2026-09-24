@@ -9,6 +9,7 @@ from app.services.order_service import create_order
 def test_invoice_snapshot_survives_order_edit(db, customer, product):
     o = create_order(db, {
         "customer_id": customer.id,
+        "fulfillment_date": "2026-12-31T12:00",
         "items": [{"product_id": product.id, "quantity": 2}],
     })
     inv = create_invoice(db, o.id)
@@ -28,6 +29,7 @@ def test_invoice_snapshot_survives_order_edit(db, customer, product):
 def test_invoice_snapshot_survives_customer_rename(db, customer, product):
     o = create_order(db, {
         "customer_id": customer.id,
+        "fulfillment_date": "2026-12-31T12:00",
         "items": [{"product_id": product.id, "quantity": 1}],
     })
     inv = create_invoice(db, o.id)

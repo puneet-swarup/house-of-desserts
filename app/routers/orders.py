@@ -2,7 +2,7 @@
 Order routes. HTTP only; business logic in order_service.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -47,6 +47,13 @@ def new_order_form(request: Request, db: Session = Depends(get_db)):
         .order_by(Product.name)
         .all()
     )
+
+    # Default fulfillment: tomorrow at 12:00, in the format datetime-local wants.
+    tomorrow_noon = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    default_fulfillment = tomorrow_noon.strftime("%Y-%m-%dT%H:%M")
+
     return templates.TemplateResponse(
         request=request,
         name="orders/form.html",
@@ -55,6 +62,7 @@ def new_order_form(request: Request, db: Session = Depends(get_db)):
             "customers": customers,
             "products": products,
             "today_date": datetime.now().strftime("%Y-%m-%d"),
+            "default_fulfillment": default_fulfillment,
         },
     )
 

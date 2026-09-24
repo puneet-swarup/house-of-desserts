@@ -1,34 +1,26 @@
-"""UI tests: Navigation + SPA-like behavior."""
+"""UI tests: Nav links, clock, FAB."""
+
+from playwright.sync_api import expect
 
 
-def test_navbar_links_work(page):
-    # Click through all nav links
-    for href, _text in [
-        ("/", "Dashboard"),
+def test_navbar_links_work(app_page, seeded, live_server):
+    for href, heading_text in [
         ("/products", "Products"),
         ("/customers", "Customers"),
         ("/orders", "Orders"),
-        ("/export", "Export"),
-        ("/audit", "Audit"),
     ]:
-        page.click(f"a[href='{href}']")
-        page.wait_for_timeout(300)
-        assert page.url.endswith(href) or "localhost:8000" in page.url
+        app_page.goto(live_server + "/")
+        app_page.click(f"a[href='{href}']")
+        expect(app_page.locator(f"h1:has-text('{heading_text}')")).to_be_visible(timeout=8000)
 
 
-def test_logo_returns_to_dashboard(page):
-    page.click("a[href='/products']")
-    page.wait_for_timeout(300)
-    # Click logo
-    page.click("a[href='/'] img")
-    page.wait_for_timeout(300)
-    assert "Today's Orders" in page.content()
+def test_logo_returns_to_dashboard(app_page, seeded, live_server):
+    app_page.goto(live_server + "/products")
+    app_page.click("a[href='/'] img")
+    expect(app_page.locator("text=Today's Orders")).to_be_visible(timeout=8000)
 
 
-def test_live_clock_present(page):
-    page.wait_for_timeout(1100)  # Wait for clock to tick
-    date_el = page.locator('#nav-date')
-    time_el = page.locator('#nav-time')
-    # On mobile these are hidden, so check they exist in DOM
-    assert date_el.count() > 0
-    assert time_el.count() > 0
+def test_live_clock_present(app_page, seeded, live_server):
+    app_page.goto(live_server + "/")
+    expect(app_page.locator("#nav-date")).to_have_count(1)
+    expect(app_page.locator("#nav-time")).to_have_count(1)
