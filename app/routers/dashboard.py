@@ -1,6 +1,4 @@
-"""
-Dashboard route — today's stats and recent orders.
-"""
+"""Dashboard route — operational stats and recent orders."""
 
 from datetime import datetime
 
@@ -16,7 +14,7 @@ from app.utils.time import business_today_bounds_utc
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/dashboard", response_class=HTMLResponse)
 def dashboard(request: Request, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
@@ -45,9 +43,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     )
 
     ready_count = (
-        db.execute(
-            select(func.count(Order.id)).where(Order.status == OrderStatus.READY)
-        ).scalar()
+        db.execute(select(func.count(Order.id)).where(Order.status == OrderStatus.READY)).scalar()
         or 0
     )
 
@@ -61,10 +57,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     )
 
     total_products = (
-        db.execute(
-            select(func.count(Product.id)).where(Product.is_active.is_(True))
-        ).scalar()
-        or 0
+        db.execute(select(func.count(Product.id)).where(Product.is_active.is_(True))).scalar() or 0
     )
 
     stats = {
@@ -76,9 +69,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     }
 
     recent_orders = (
-        db.execute(select(Order).order_by(Order.created_at.desc()).limit(10))
-        .scalars()
-        .all()
+        db.execute(select(Order).order_by(Order.created_at.desc()).limit(10)).scalars().all()
     )
 
     return templates.TemplateResponse(

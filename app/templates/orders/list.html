@@ -43,7 +43,14 @@
                         </p>
                     </div>
                     <div class="text-right shrink-0">
-                        <span class="badge badge-ghost">{{ order.status.value.replace('_', ' ') }}</span>
+                        <div class="flex gap-1 flex-wrap justify-end">
+                            <span class="badge {{ order.status_badge_class }} badge-sm">
+                                {{ order.status.value.replace('_', ' ') }}
+                            </span>
+                            <span class="badge {{ order.payment_badge_class }} badge-sm">
+                                {{ order.payment_label }}
+                            </span>
+                        </div>
                         <p class="font-bold mt-1">{{ order.total_amount|money }}</p>
                         {% if order.balance_due > 0 %}
                         <p class="text-xs text-error">Balance: {{ order.balance_due|money }}</p>

@@ -30,13 +30,13 @@ class OrderStatus(str, enum.Enum):
     CANCELLED = "CANCELLED"
 
 
+# Fulfillment workflow only. PAID is a terminal state reached after
+# DELIVERED — it does NOT mean "settled early". Payments never auto-set
+# status. To settle a fully-paid-but-not-delivered order, complete the
+# fulfillment first.
 ALLOWED_TRANSITIONS: dict[OrderStatus, set[OrderStatus]] = {
     OrderStatus.INQUIRY: {OrderStatus.CONFIRMED, OrderStatus.CANCELLED},
-    OrderStatus.CONFIRMED: {
-        OrderStatus.IN_PROGRESS,
-        OrderStatus.CANCELLED,
-        OrderStatus.PAID,
-    },
+    OrderStatus.CONFIRMED: {OrderStatus.IN_PROGRESS, OrderStatus.CANCELLED},
     OrderStatus.IN_PROGRESS: {OrderStatus.READY, OrderStatus.CANCELLED},
     OrderStatus.READY: {OrderStatus.DELIVERED, OrderStatus.CANCELLED},
     OrderStatus.DELIVERED: {OrderStatus.PAID},
@@ -56,17 +56,9 @@ class Order(Base):
         SAEnum(OrderStatus), nullable=False, default=OrderStatus.INQUIRY
     )
 
-    order_date: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
-
-    # Promised date+time — when the customer receives the item (pickup or delivery).
-    # The column name is intentionally generic so pickup orders use it too.
+    order_date: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     fulfillment_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    delivery_type: Mapped[str] = mapped_column(
-        String(10), nullable=False, default="PICKUP"
-    )
+    delivery_type: Mapped[str] = mapped_column(String(10), nullable=False, default="PICKUP")
     delivery_address: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     total_amount: Mapped[Decimal] = mapped_column(
@@ -81,16 +73,12 @@ class Order(Base):
 
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=utcnow, onupdate=utcnow, nullable=False
     )
 
-    customer: Mapped[Customer] = relationship(
-        back_populates="orders", lazy="joined"
-    )
+    customer: Mapped[Customer] = relationship(back_populates="orders", lazy="joined")
     items: Mapped[list[OrderItem]] = relationship(
         back_populates="order",
         lazy="selectin",
@@ -112,11 +100,58 @@ class Order(Base):
         Index("ix_orders_fulfillment_date", "fulfillment_date"),
     )
 
-    def __repr__(self) -> str:
-        return f"<Order id={self.id} number={self.order_number!r} status={self.status}>"
+    # ---------- Computed helpers ----------
+
+    @property
+    def payment_state(self) -> str:
+        """Independent of fulfillment status. 'paid' / 'partial' / 'unpaid'."""
+        if self.balance_due is not None and self.balance_due <= 0:
+            return "paid"
+        if self.advance_paid is not None and self.advance_paid > 0:
+            return "partial"
+        return "unpaid"
+
+    @property
+    def payment_badge_class(self) -> str:
+        return {
+            "paid": "badge-success",
+            "partial": "badge-warning",
+            "unpaid": "badge-ghost",
+        }[self.payment_state]
+
+    @property
+    def payment_label(self) -> str:
+        return {
+            "paid": "Paid",
+            "partial": "Partial",
+            "unpaid": "Unpaid",
+        }[self.payment_state]
+
+    @property
+    def status_badge_class(self) -> str:
+        return {
+            "INQUIRY": "badge-ghost",
+            "CONFIRMED": "badge-info",
+            "IN_PROGRESS": "badge-warning",
+            "READY": "badge-success",
+            "DELIVERED": "badge-primary",
+            "PAID": "badge-success",
+            "CANCELLED": "badge-error",
+        }.get(self.status.value, "badge-ghost")
+
+    @property
+    def allowed_next_statuses(self) -> list[OrderStatus]:
+        """The legal next statuses from the current one, sorted."""
+        return sorted(
+            ALLOWED_TRANSITIONS.get(self.status, set()),
+            key=lambda s: s.value,
+        )
 
     def can_transition_to(self, new_status: OrderStatus) -> bool:
         return new_status in ALLOWED_TRANSITIONS.get(self.status, set())
+
+    def __repr__(self) -> str:
+        return f"<Order id={self.id} number={self.order_number!r} status={self.status}>"
 
 
 class OrderItem(Base):

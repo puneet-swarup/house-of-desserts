@@ -363,12 +363,14 @@ def record_payment(
     reference: str | None,
     received_at: datetime | None = None,
 ) -> Order:
+    """
+    Record a payment. Updates balance only — never touches status.
+    Status is a fulfillment concept; payment is orthogonal.
+    """
     order = get_order(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
         raise HTTPException(status_code=400, detail="Cannot record payment on a cancelled order")
-    if order.status == OrderStatus.PAID:
-        raise HTTPException(status_code=400, detail="Order is already fully paid")
 
     amt = money(amount)
     if amt <= 0:
@@ -391,11 +393,8 @@ def record_payment(
 
     order.advance_paid = money(order.advance_paid + amt)
     order.balance_due = money(order.total_amount - order.advance_paid)
-
-    if order.balance_due <= Decimal("0.00"):
+    if order.balance_due < 0:
         order.balance_due = Decimal("0.00")
-        if order.can_transition_to(OrderStatus.PAID):
-            order.status = OrderStatus.PAID
 
     log_action(
         db,

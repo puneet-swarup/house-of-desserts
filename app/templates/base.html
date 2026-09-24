@@ -14,7 +14,7 @@
     <!-- Top Navbar -->
     <div class="navbar bg-gradient-to-r from-amber-50 to-orange-50 shadow-md sticky top-0 z-50 border-b border-amber-200">
         <div class="container mx-auto px-4 flex items-center">
-            <a href="/" class="flex items-center gap-2 mr-2">
+            <a href="/today" class="flex items-center gap-2 mr-2">
                 <img src="/static/images/logo.png" alt="Logo"
                      class="h-9 w-9 rounded-full shadow-sm object-cover" />
                 <div class="hidden sm:block">
@@ -29,8 +29,12 @@
             </a>
 
             <nav class="flex items-center justify-center gap-0.5 flex-1 overflow-x-auto py-1">
-                <a href="/"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if request.url.path == '/' %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                <a href="/today"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📅 <span class="hidden sm:inline">Today</span>
+                </a>
+                <a href="/dashboard"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/dashboard' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     📊 <span class="hidden sm:inline">Dashboard</span>
                 </a>
                 <a href="/products"
@@ -49,10 +53,10 @@
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/export' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     📥 <span class="hidden sm:inline">Export</span>
                 </a>
-                <a href="/audit"
+                <!-- <a href="/audit"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/audit' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     📜 <span class="hidden sm:inline">Audit</span>
-                </a>
+                </a> -->
             </nav>
 
             <div class="flex-none flex items-center gap-2">
@@ -104,6 +108,18 @@
         root.appendChild(el);
         setTimeout(() => el.remove(), 3500);
     }
+    // Global HTMX error handling — surface server errors as toasts.
+    document.body.addEventListener('htmx:responseError', function (evt) {
+        let msg = 'Request failed';
+        try {
+            const detail = JSON.parse(evt.detail.xhr.responseText).detail;
+            if (detail) msg = detail;
+        } catch (e) { /* not JSON, use default */ }
+        if (typeof toast === 'function') toast(msg, 'error');
+    });
+    document.body.addEventListener('htmx:sendError', function () {
+        if (typeof toast === 'function') toast('Network error', 'error');
+    });
     </script>
 
     {% block modals %}{% endblock %}
