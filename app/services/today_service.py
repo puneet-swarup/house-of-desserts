@@ -1,76 +1,90 @@
 """
 Today page business logic — dispatch list and production list.
 
-- Dispatch: orders fulfilling today, all non-cancelled statuses, per-order.
-- Production: unfulfilled orders (CONFIRMED/IN_PROGRESS) fulfilling in
-  the next 7 days, aggregated by SKU into three buckets.
+Design note: fulfillment_date is stored as a naive datetime that
+represents the customer's local (business timezone) intent — they
+typed "15:00" meaning 3pm local. We therefore filter by comparing
+the DATE portion of that naive value against the current date in
+the business timezone. Comparing against UTC bounds was wrong and
+produced off-by-hours bugs on non-local servers (CI).
 """
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.config import get_settings
 from app.models import Order, OrderItem, OrderStatus, Product
-from app.utils.time import business_today_bounds_utc
+
+
+def _today_local() -> datetime.date:
+    settings = get_settings()
+    tz = ZoneInfo(settings.business_timezone)
+    return datetime.now(tz).date()
 
 
 def dispatch_today(db: Session) -> list[Order]:
-    """Orders fulfilling today (business timezone), sorted by fulfillment time."""
-    today_start, today_end = business_today_bounds_utc()
+    """
+    Orders fulfilling today (business timezone), sorted by fulfillment time.
+    """
+    today = _today_local()
 
-    query = (
-        select(Order)
-        .options(selectinload(Order.items), selectinload(Order.payments))
-        .where(
-            Order.fulfillment_date >= today_start,
-            Order.fulfillment_date <= today_end,
-            Order.status != OrderStatus.CANCELLED,
+    orders = (
+        db.execute(
+            select(Order)
+            .options(selectinload(Order.items), selectinload(Order.payments))
+            .where(Order.status != OrderStatus.CANCELLED)
+            .order_by(Order.fulfillment_date.asc())
         )
-        .order_by(Order.fulfillment_date.asc())
+        .scalars()
+        .all()
     )
-    return list(db.execute(query).scalars().all())
+
+    return [o for o in orders if o.fulfillment_date and o.fulfillment_date.date() == today]
 
 
 def production_this_week(db: Session, days: int = 7) -> dict:
     """
-    Aggregate production needs for unfulfilled orders.
+    Aggregate production needs for unfulfilled orders in the next N days.
 
-    Returns {
-        "urgent":   [ {sku, name, measure, pack, qty, order_count, earliest, prep_hours}, ... ],
-        "tomorrow": [ ... ],
-        "later":    [ ... ],
-        "total_units": int,
-    }
+    Buckets:
+      urgent   — fulfilling today
+      tomorrow — fulfilling tomorrow
+      later    — fulfilling within the horizon but after tomorrow
+
+    Orders with status CANCELLED, READY, DELIVERED, or PAID are excluded —
+    they're done or irrelevant to baking.
     """
-    today_start, today_end = business_today_bounds_utc()
-    tomorrow_end = today_end + timedelta(days=1)
-    horizon_end = today_start + timedelta(days=days)
+    today = _today_local()
+    tomorrow = today + timedelta(days=1)
+    horizon = today + timedelta(days=days)
 
-    query = (
+    rows = db.execute(
         select(OrderItem, Order, Product)
         .join(Order, OrderItem.order_id == Order.id)
         .join(Product, OrderItem.product_id == Product.id)
-        .where(
-            Order.status.in_([OrderStatus.CONFIRMED, OrderStatus.IN_PROGRESS]),
-            Order.fulfillment_date >= today_start,
-            Order.fulfillment_date < horizon_end,
-        )
+        .where(Order.status.in_([OrderStatus.CONFIRMED, OrderStatus.IN_PROGRESS]))
         .order_by(Order.fulfillment_date.asc())
-    )
+    ).all()
 
-    rows = db.execute(query).all()
-
-    # bucket key = ("urgent" | "tomorrow" | "later", product_id)
+    # key = (bucket_name, product_id)
     agg: dict[tuple[str, int], dict] = {}
     order_ids_per_key: dict[tuple[str, int], set[int]] = {}
 
     for item, order, product in rows:
-        if order.fulfillment_date <= today_end:
+        if not order.fulfillment_date:
+            continue
+        fdate = order.fulfillment_date.date()
+        if fdate < today or fdate >= horizon:
+            continue
+
+        if fdate == today:
             bucket = "urgent"
-        elif order.fulfillment_date <= tomorrow_end:
+        elif fdate == tomorrow:
             bucket = "tomorrow"
         else:
             bucket = "later"
@@ -103,12 +117,12 @@ def production_this_week(db: Session, days: int = 7) -> dict:
         )
 
     urgent = _sorted("urgent")
-    tomorrow = _sorted("tomorrow")
+    tomorrow_rows = _sorted("tomorrow")
     later = _sorted("later")
 
     return {
         "urgent": urgent,
-        "tomorrow": tomorrow,
+        "tomorrow": tomorrow_rows,
         "later": later,
-        "total_units": sum(r["qty"] for r in urgent + tomorrow + later),
+        "total_units": sum(r["qty"] for r in urgent + tomorrow_rows + later),
     }
