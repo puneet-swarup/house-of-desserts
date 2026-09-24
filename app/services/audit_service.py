@@ -1,16 +1,33 @@
 """
-Audit service — records every significant change to the database.
+Audit service.
 
-Python concept: This is a "fire and forget" pattern. After any mutation
-(create/update/delete), the service is called with details of what changed.
-It inserts a row into the audit_log table. The log is APPEND-ONLY —
-no updates, no deletes. This gives you a tamper-evident trail.
+Contract: log_action() NEVER commits. It adds a row to the session.
+The caller is responsible for a single db.commit() that persists both
+the mutation and the audit entry atomically.
+
+If an audit write fails, the whole transaction rolls back — which is
+what you want for financial records.
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+import json
+from decimal import Decimal
+
 from sqlalchemy.orm import Session
 
-from app.models import AuditLog
+from app.models.audit_log import AuditLog
+
+
+def _json_default(obj):
+    """Serialize Decimal, datetime, and Enum to plain values."""
+    if isinstance(obj, Decimal):
+        return str(obj)
+    if hasattr(obj, "isoformat"):
+        return obj.isoformat()
+    if hasattr(obj, "value"):  # Enum
+        return obj.value
+    return str(obj)
 
 
 def log_action(
@@ -21,27 +38,20 @@ def log_action(
     old_value: dict | None = None,
     new_value: dict | None = None,
     changed_by: str = "system",
-):
+) -> AuditLog:
     """
-    Record an audit log entry.
+    Add an audit entry to the session. Does NOT commit.
 
-    Args:
-        entity_type: "Customer", "Product", "Order", "Payment", "Invoice"
-        entity_id: The ID of the entity
-        action: "CREATE", "UPDATE", "DELETE", "STATUS_CHANGE", "PAYMENT"
-        old_value: Dict of old field values (for UPDATE)
-        new_value: Dict of new field values (for CREATE/UPDATE)
-        changed_by: Who made the change (always "system" for now)
+    Caller must db.commit() to persist. If the caller's transaction
+    rolls back, this entry is discarded too.
     """
-    import json
-
     entry = AuditLog(
         entity_type=entity_type,
         entity_id=entity_id,
         action=action,
-        old_value=json.dumps(old_value) if old_value else None,
-        new_value=json.dumps(new_value) if new_value else None,
+        old_value=json.dumps(old_value, default=_json_default) if old_value else None,
+        new_value=json.dumps(new_value, default=_json_default) if new_value else None,
         changed_by=changed_by,
     )
     db.add(entry)
-    db.commit()
+    return entry

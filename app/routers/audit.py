@@ -1,3 +1,5 @@
+"""Audit log page — append-only view of all changes."""
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
@@ -9,7 +11,7 @@ from app.models import AuditLog
 router = APIRouter()
 
 
-@router.get("/audit", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)
 def audit_page(request: Request, entity: str = "ALL", db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings

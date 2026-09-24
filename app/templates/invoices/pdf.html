@@ -73,8 +73,7 @@
         <tr>
             <th>#</th>
             <th>Item</th>
-            <th>HSN</th>
-            <th class="text-right">Qty</th>
+<th class="text-right">Qty</th>
             <th class="text-right">Rate</th>
             <th class="text-right">GST</th>
             <th class="text-right">Amount</th>
@@ -85,8 +84,7 @@
         <tr>
             <td>{{ loop.index }}</td>
             <td>{{ item.product.name }}{% if item.customization_notes %}<br><small>({{ item.customization_notes }})</small>{% endif %}</td>
-            <td>{{ item.product.hsn_code }}</td>
-            <td class="text-right">{{ item.quantity }}</td>
+<td class="text-right">{{ item.quantity }}</td>
             <td class="text-right">{{ settings.currency }}{{ "{:,.2f}".format(item.unit_price) }}</td>
             <td class="text-right">{{ settings.currency }}{{ "{:,.2f}".format(item.gst_amount) }}</td>
             <td class="text-right"><strong>{{ settings.currency }}{{ "{:,.2f}".format(item.line_total) }}</strong></td>

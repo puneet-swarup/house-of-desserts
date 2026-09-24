@@ -1,6 +1,6 @@
 [project]
 name = "house-of-desserts"
-version = "0.1.0"
+version = "0.2.0"
 description = "Order management system for a home bakery"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +14,7 @@ dependencies = [
     "python-escpos>=3.1",
     "fpdf2>=2.7",
     "httpx>=0.27",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
@@ -31,8 +32,28 @@ build-backend = "setuptools.build_meta"
 line-length = 100
 target-version = "py312"
 
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
+ignore = [
+    "E501",
+    "B008",
+    "UP042",
+    "N806",
+    "SIM105",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/main.py" = ["E402"]
+"tests/conftest.py" = ["E402", "N806"]
+"tests/**/*.py" = ["E741", "B007", "E712", "F401"]
+"app/services/__init__.py" = ["F401"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--ignore=tests/ui -q"
+markers = [
+    "ui: Playwright UI tests (require running app + browser)",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

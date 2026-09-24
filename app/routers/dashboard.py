@@ -1,67 +1,85 @@
 """
-Dashboard route — shows today's stats and recent orders.
+Dashboard route — today's stats and recent orders.
 """
 
-from datetime import datetime, time
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Order, OrderStatus, Product
+from app.utils.time import business_today_bounds_utc
 
 router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(
-    request: Request,
-    db: Session = Depends(get_db),
-):
-    """Render the dashboard page with stats and recent orders."""
+def dashboard(request: Request, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
 
-    # --- Calculate stats ---
-    today_start = datetime.combine(datetime.now().date(), time.min)
+    today_start, today_end = business_today_bounds_utc()
 
-    # Orders created today
-    today_orders = db.execute(
-        select(func.count(Order.id)).where(Order.order_date >= today_start)
-    ).scalar() or 0
+    today_orders = (
+        db.execute(
+            select(func.count(Order.id)).where(
+                Order.order_date >= today_start,
+                Order.order_date <= today_end,
+            )
+        ).scalar()
+        or 0
+    )
 
-    # Orders pending delivery (READY status, delivery_date is today or future)
-    pending_delivery = db.execute(
-        select(func.count(Order.id)).where(
-            Order.status == OrderStatus.READY
-        )
-    ).scalar() or 0
+    fulfillments_today = (
+        db.execute(
+            select(func.count(Order.id)).where(
+                Order.fulfillment_date >= today_start,
+                Order.fulfillment_date <= today_end,
+                Order.status.not_in([OrderStatus.PAID, OrderStatus.CANCELLED]),
+            )
+        ).scalar()
+        or 0
+    )
 
-    # Total outstanding balance across all non-cancelled orders
-    outstanding = db.execute(
-        select(func.coalesce(func.sum(Order.balance_due), 0)).where(
-            Order.status != OrderStatus.CANCELLED
-        )
-    ).scalar() or 0
+    ready_count = (
+        db.execute(
+            select(func.count(Order.id)).where(Order.status == OrderStatus.READY)
+        ).scalar()
+        or 0
+    )
 
-    # Total active products
-    total_products = db.execute(
-        select(func.count(Product.id)).where(Product.is_active == True)
-    ).scalar() or 0
+    outstanding = (
+        db.execute(
+            select(func.coalesce(func.sum(Order.balance_due), 0)).where(
+                Order.status != OrderStatus.CANCELLED
+            )
+        ).scalar()
+        or 0
+    )
+
+    total_products = (
+        db.execute(
+            select(func.count(Product.id)).where(Product.is_active.is_(True))
+        ).scalar()
+        or 0
+    )
 
     stats = {
         "today_orders": today_orders,
-        "pending_delivery": pending_delivery,
+        "fulfillments_today": fulfillments_today,
+        "ready_count": ready_count,
         "outstanding_balance": outstanding,
         "total_products": total_products,
     }
 
-    # Recent orders (last 10)
-    recent_orders = db.execute(
-        select(Order).order_by(Order.created_at.desc()).limit(10)
-    ).scalars().all()
+    recent_orders = (
+        db.execute(select(Order).order_by(Order.created_at.desc()).limit(10))
+        .scalars()
+        .all()
+    )
 
     return templates.TemplateResponse(
         request=request,
@@ -70,5 +88,6 @@ def dashboard(
             "settings": settings,
             "stats": stats,
             "recent_orders": recent_orders,
+            "now": datetime.now(),
         },
-    )   
+    )
