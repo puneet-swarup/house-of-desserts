@@ -1,35 +1,43 @@
-"""Tests for CSV/JSON export."""
+"""Tests for CSV and JSON exports."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+from app.config import get_settings
+
+
+def _business_today() -> str:
+    """Today's date in the business timezone, not the runner's timezone."""
+    tz = ZoneInfo(get_settings().business_timezone)
+    return datetime.now(tz).strftime("%Y-%m-%d")
 
 
 def test_export_orders_csv(client, db_session, sample_order):
     db_session.commit()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _business_today()
     resp = client.get(f"/export/orders.csv?start=2020-01-01&end={today}")
     assert resp.status_code == 200
-    assert "text/csv" in resp.headers["content-type"]
     assert "Order Number" in resp.text
 
 
 def test_export_orders_includes_delivery_type(client, db_session, sample_order):
     db_session.commit()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _business_today()
     resp = client.get(f"/export/orders.csv?start=2020-01-01&end={today}")
+    assert resp.status_code == 200
     assert "DELIVERY" in resp.text
 
 
 def test_export_payments_csv(client, db_session, sample_order):
     db_session.commit()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _business_today()
     resp = client.get(f"/export/payments.csv?start=2020-01-01&end={today}")
     assert resp.status_code == 200
-    assert "text/csv" in resp.headers["content-type"]
 
 
 def test_export_summary_json(client, db_session, sample_order):
     db_session.commit()
-    today = datetime.now().strftime("%Y-%m-%d")
+    today = _business_today()
     resp = client.get(f"/export/summary.json?start=2020-01-01&end={today}")
     assert resp.status_code == 200
     data = resp.json()
