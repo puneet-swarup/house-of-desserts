@@ -1,43 +1,63 @@
 {% extends "base.html" %}
-{% block title %}New Order — {{ settings.app_name }}{% endblock %}
+{% set is_edit = (mode == 'edit') %}
+{% block title %}{{ "Edit " ~ order.order_number if is_edit else "New Order" }} — {{ settings.app_name }}{% endblock %}
 
 {% block content %}
 <div class="container mx-auto max-w-3xl space-y-4">
 
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-extrabold text-amber-900">New Order</h1>
-        <a href="/orders" class="btn btn-ghost btn-sm">← Back</a>
+        <h1 class="text-2xl font-extrabold text-amber-900">
+            {{ "Edit " ~ order.order_number if is_edit else "New Order" }}
+        </h1>
+        <a href="{{ '/orders/' ~ order.id if is_edit else '/orders' }}" class="btn btn-ghost btn-sm">← Back</a>
     </div>
+
+    {% if is_edit and has_invoice %}
+    <div class="alert alert-warning text-sm">
+        <span>An invoice has already been issued for this order. Edits here will <strong>not</strong> change that invoice.</span>
+    </div>
+    {% endif %}
 
     {% if error %}
     <div class="alert alert-error"><span>{{ error }}</span></div>
     {% endif %}
 
-    <form method="post" action="/orders/" id="order-form" class="space-y-4">
+    <form method="post" action="{{ form_action }}" id="order-form" class="space-y-4">
 
         <!-- Customer -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
-                <div style="display: flex; gap: 0.5rem; align-items: stretch; width: 100%;">
-                    <select name="customer_id" id="customer_id" class="select select-bordered"
-                            style="flex: 1 1 auto; min-width: 0;" required>
-                        <option value="">Select a customer…</option>
-                        {% for c in customers %}
-                        <option value="{{ c.id }}"
-                                data-default-address="{{ c.default_address_line }}"
-                                data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
-                                {% if form_data and form_data.customer_id == c.id %}selected{% endif %}>
-                            {{ c.name }} — {{ c.phone }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                    <button type="button" class="btn btn-outline"
-                            style="flex: 0 0 auto; white-space: nowrap;"
-                            onclick="openQuickAdd()">
-                        + New Customer
-                    </button>
-                </div>
+
+                {% if is_edit %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300">
+                        <p class="font-semibold">{{ order.customer.name }}</p>
+                        <p class="text-sm text-base-content/60">{{ order.customer.phone }}</p>
+                        <p class="text-xs text-base-content/50 mt-1">
+                            Customer cannot be changed. Cancel and recreate if needed.
+                        </p>
+                    </div>
+                {% else %}
+                    <div style="display: flex; gap: 0.5rem; align-items: stretch; width: 100%;">
+                        <select name="customer_id" id="customer_id" class="select select-bordered"
+                                style="flex: 1 1 auto; min-width: 0;" required>
+                            <option value="">Select a customer…</option>
+                            {% for c in customers %}
+                            <option value="{{ c.id }}"
+                                    data-default-address="{{ c.default_address_line }}"
+                                    data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
+                                    {% if form_data and form_data.customer_id == c.id %}selected{% endif %}>
+                                {{ c.name }} — {{ c.phone }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-outline"
+                                style="flex: 0 0 auto; white-space: nowrap;"
+                                onclick="openQuickAdd()">
+                            + New Customer
+                        </button>
+                    </div>
+                {% endif %}
             </div>
         </div>
 
@@ -49,23 +69,28 @@
                 <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; width: 100%;">
                     <div class="form-control" style="flex: 1 1 12rem; min-width: 0;">
                         <label class="label"><span class="label-text font-semibold">Type</span></label>
+                        {% set cur_type = order.delivery_type if is_edit else (form_data.delivery_type if form_data else 'DELIVERY') %}
                         <select name="delivery_type" id="delivery_type" class="select select-bordered w-full">
-                            <option value="DELIVERY" selected>Delivery</option>
-                            <option value="PICKUP">Pickup</option>
+                            <option value="DELIVERY" {% if cur_type == 'DELIVERY' %}selected{% endif %}>Delivery</option>
+                            <option value="PICKUP" {% if cur_type == 'PICKUP' %}selected{% endif %}>Pickup</option>
                         </select>
                     </div>
+
+                    {% if not is_edit %}
                     <div class="form-control" style="flex: 1 1 12rem; min-width: 0;">
                         <label class="label"><span class="label-text font-semibold">Order placed on</span></label>
                         <input type="date" name="order_date" class="input input-bordered w-full"
                                value="{{ form_data.order_date if form_data and form_data.order_date else today_date }}" />
                     </div>
+                    {% endif %}
                 </div>
 
-                                <div class="form-control">
+                <div class="form-control">
                     <label class="label"><span class="label-text font-semibold">Ready by / Fulfillment time</span></label>
+                    {% set cur_fulfillment = (order.fulfillment_date.strftime('%Y-%m-%dT%H:%M') if order.fulfillment_date else '') if is_edit else (form_data.fulfillment_date if form_data and form_data.fulfillment_date else default_fulfillment) %}
                     <input type="datetime-local" name="fulfillment_date" id="fulfillment_date"
                            class="input input-bordered w-full"
-                           value="{{ form_data.fulfillment_date if form_data and form_data.fulfillment_date else default_fulfillment }}"
+                           value="{{ cur_fulfillment }}"
                            required />
                     <label class="label">
                         <span class="label-text-alt text-xs text-base-content/60">
@@ -76,9 +101,10 @@
 
                 <div class="form-control" id="delivery_address_wrap">
                     <label class="label"><span class="label-text font-semibold">Delivery address</span></label>
+                    {% set cur_addr = (order.delivery_address or '') if is_edit else (form_data.delivery_address if form_data and form_data.delivery_address else '') %}
                     <textarea name="delivery_address" id="delivery_address"
                               class="textarea textarea-bordered w-full" rows="3"
-                              placeholder="Auto-filled from customer's default address"></textarea>
+                              placeholder="Auto-filled from customer's default address">{{ cur_addr }}</textarea>
                 </div>
             </div>
         </div>
@@ -89,28 +115,55 @@
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>
 
                 <div id="items" class="space-y-2">
-                    <div class="item-row"
-                         style="display: flex; gap: 0.5rem; align-items: flex-end; width: 100%;">
-                        <div class="form-control" style="flex: 1 1 auto; min-width: 0;">
-                            <label class="label"><span class="label-text font-semibold">Product</span></label>
-                            <select name="product_id" class="select select-bordered select-sm w-full" required>
-                                <option value="">Select…</option>
-                                {% for p in products %}
-                                <option value="{{ p.id }}">
-                                    {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
-                                </option>
-                                {% endfor %}
-                            </select>
+                    {% if is_edit %}
+                        {% for item in order.items %}
+                        <div class="item-row"
+                             style="display: flex; gap: 0.5rem; align-items: flex-end; width: 100%;">
+                            <div class="form-control" style="flex: 1 1 auto; min-width: 0;">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-control" style="flex: 0 0 5.5rem;">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-sm"
+                                    style="flex: 0 0 auto;"
+                                    onclick="this.closest('.item-row').remove()">Remove</button>
                         </div>
-                        <div class="form-control" style="flex: 0 0 5.5rem;">
-                            <label class="label"><span class="label-text font-semibold">Qty</span></label>
-                            <input type="number" min="1" value="1" name="quantity"
-                                   class="input input-bordered input-sm w-full" required />
+                        {% endfor %}
+                    {% else %}
+                        <div class="item-row"
+                             style="display: flex; gap: 0.5rem; align-items: flex-end; width: 100%;">
+                            <div class="form-control" style="flex: 1 1 auto; min-width: 0;">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}">
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-control" style="flex: 0 0 5.5rem;">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="1" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <button type="button" class="btn btn-ghost btn-sm"
+                                    style="flex: 0 0 auto;"
+                                    onclick="this.closest('.item-row').remove()">Remove</button>
                         </div>
-                        <button type="button" class="btn btn-ghost btn-sm"
-                                style="flex: 0 0 auto;"
-                                onclick="this.closest('.item-row').remove()">Remove</button>
-                    </div>
+                    {% endif %}
                 </div>
 
                 <div>
@@ -119,7 +172,8 @@
             </div>
         </div>
 
-        <!-- Advance -->
+        <!-- Advance (create only) -->
+        {% if not is_edit %}
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Advance</h2>
@@ -140,23 +194,30 @@
                         </select>
                     </div>
                 </div>
+            </div>
+        </div>
+        {% endif %}
 
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-semibold">Notes</span></label>
-                    <textarea name="notes" rows="2" class="textarea textarea-bordered w-full">{{ (form_data.notes if form_data else '') or '' }}</textarea>
-                </div>
+        <!-- Notes -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-3">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Notes</h2>
+                <textarea name="notes" rows="3" class="textarea textarea-bordered w-full">{{ (order.notes if is_edit and order.notes else (form_data.notes if form_data and form_data.notes else '')) or '' }}</textarea>
             </div>
         </div>
 
         <div class="flex justify-end gap-2">
-            <a href="/orders" class="btn btn-ghost">Cancel</a>
-            <button class="btn btn-primary" type="submit">Create Order</button>
+            <a href="{{ '/orders/' ~ order.id if is_edit else '/orders' }}" class="btn btn-ghost">Cancel</a>
+            <button class="btn btn-primary" type="submit">
+                {{ "Save Changes" if is_edit else "Create Order" }}
+            </button>
         </div>
     </form>
 </div>
 {% endblock %}
 
 {% block modals %}
+{% if not is_edit %}
 <dialog id="quick-customer-modal"
         class="modal modal-bottom sm:modal-middle"
         onclick="if (event.target === this) closeQuickAdd()">
@@ -200,6 +261,7 @@
         </div>
     </div>
 </dialog>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -213,6 +275,7 @@ function addItemRow() {
     container.appendChild(clone);
 }
 
+{% if not is_edit %}
 (function () {
     const customerSelect = document.getElementById('customer_id');
     const deliveryType = document.getElementById('delivery_type');
@@ -297,5 +360,17 @@ async function submitQuickAdd() {
         toast('Network error', 'error');
     }
 }
+{% else %}
+// Edit mode: just manage address visibility based on delivery type
+(function () {
+    const deliveryType = document.getElementById('delivery_type');
+    const addressWrap = document.getElementById('delivery_address_wrap');
+    function sync() {
+        addressWrap.style.display = (deliveryType.value === 'DELIVERY') ? '' : 'none';
+    }
+    deliveryType.addEventListener('change', sync);
+    sync();
+})();
+{% endif %}
 </script>
 {% endblock %}
