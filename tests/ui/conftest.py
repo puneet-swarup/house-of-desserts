@@ -128,15 +128,14 @@ def seeded(live_server):
     """
     Wipe domain tables and insert one customer + one product.
     Returns a dict with IDs and names so tests can reference them.
-    Uses a fresh engine — never touches the app's module-level engine.
     """
+    from zoneinfo import ZoneInfo
+
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
 
+    from app.config import get_settings
     from app.database import Base
-
-    # Import models purely to get Base.metadata populated.
-    # The engine inside app.database is irrelevant here — we make our own.
     from app.models import (  # noqa: F401
         Address,
         Customer,
@@ -152,19 +151,19 @@ def seeded(live_server):
     db = Session()
 
     try:
-        # FK-safe wipe order
         for model in (Invoice, Payment, OrderItem, Order, Address, Customer, Product):
             db.query(model).delete()
         db.commit()
 
-        # Phone must be pure digits so WhatsApp link building works.
-        # Use a 5-digit numeric suffix — safe for phone + unique per test.
-        num = uuid.uuid4().int % 100000
+        # Numeric suffix so phone normalization works
+        import uuid as _uuid
+
+        num = _uuid.uuid4().int % 100000
         suffix = f"{num:05d}"
 
         c = Customer(
             name=f"UI Customer {suffix}",
-            phone=f"90000{suffix}",  # 10 digits total
+            phone=f"90000{suffix}",  # 10 digits, no letters
             email=None,
             is_active=True,
         )
@@ -185,6 +184,10 @@ def seeded(live_server):
         db.commit()
         db.refresh(p)
 
+        # Tomorrow at 12:00 in the BUSINESS timezone, not the runner's.
+        tz = ZoneInfo(get_settings().business_timezone)
+        fulfillment = (datetime.now(tz) + timedelta(days=1)).strftime("%Y-%m-%dT12:00")
+
         yield {
             "customer_id": c.id,
             "customer_name": c.name,
@@ -192,7 +195,7 @@ def seeded(live_server):
             "product_id": p.id,
             "product_name": p.name,
             "product_sku": p.sku,
-            "fulfillment": (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT12:00"),
+            "fulfillment": fulfillment,
         }
     finally:
         db.close()

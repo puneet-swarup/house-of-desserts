@@ -1,13 +1,21 @@
 """UI tests: Today page dispatch + production."""
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from playwright.sync_api import expect
 
+from app.config import get_settings
+
 
 def _today_fulfillment() -> str:
-    # 15:00 local today
-    return datetime.now().strftime("%Y-%m-%d") + "T15:00"
+    """
+    'Today at 15:00' in the BUSINESS timezone, not the runner's.
+    On UTC runners, the naive date is one day behind IST between
+    18:30 UTC and midnight UTC — which is why this must be tz-aware.
+    """
+    tz = ZoneInfo(get_settings().business_timezone)
+    return datetime.now(tz).strftime("%Y-%m-%d") + "T15:00"
 
 
 def _create_today_order(app_page, live_server, seeded):
