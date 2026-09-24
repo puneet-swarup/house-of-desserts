@@ -1,54 +1,59 @@
-"""UI tests: Customer CRUD + addresses via browser."""
+"""UI tests: Customer CRUD + addresses."""
+
+from playwright.sync_api import expect
 
 
-def test_add_customer_with_address(page):
-    page.click("a[href='/customers']")
-    page.wait_for_timeout(500)
-    page.click("a[href='/customers/new']")
-    page.wait_for_timeout(500)
+def test_add_customer_with_address(app_page, seeded, live_server):
+    app_page.goto(live_server + "/customers/new")
 
-    # Fill customer details
-    page.fill('input[name="name"]', "UI Test Customer")
-    page.fill('input[name="phone"]', "+91 12345 67890")
+    app_page.fill('input[name="name"]', "UI Added Customer")
+    app_page.fill('input[name="phone"]', "+91 55555 11111")
+    app_page.fill('textarea[name="addr_new_line"]', "42 UI Test Street, Mumbai")
 
-    # Fill address (first row)
-    page.fill('input[name="addr_new_label"]', "Home")
-    page.fill('input[name="addr_new_line"]', "42 UI Test Street, Mumbai")
-    # Check default
-    page.check('input[name="addr_new_default"]')
+    app_page.click('button[type="submit"]')
 
-    # Submit
-    page.click('button[type="submit"]')
-    page.wait_for_timeout(500)
-
-    # Verify in list
-    assert "UI Test Customer" in page.content()
-    assert "+91 12345 67890" in page.content()
+    expect(app_page.locator("td:has-text('UI Added Customer')")).to_be_visible(timeout=8000)
 
 
-def test_customer_detail_shows_address(page):
-    page.click("a[href='/customers']")
-    page.wait_for_timeout(500)
+def test_customer_detail_shows_address(app_page, seeded, live_server):
+    app_page.goto(live_server + f"/customers/{seeded['customer_id']}/edit")
 
-    # Click on the customer name link
-    if "UI Test Customer" in page.content():
-        page.click("a:has-text('UI Test Customer')")
-        page.wait_for_timeout(500)
+    # New-address row is hidden until + Add Address is clicked
+    app_page.click("button:has-text('+ Add Address')")
+    app_page.fill('textarea[name="addr_new_line"]', "7 Seeded Lane, Bangalore")
+    app_page.click('button[type="submit"]')
 
-        # Verify address is shown
-        assert "42 UI Test Street" in page.content()
-        assert "Home" in page.content()
+    app_page.goto(live_server + f"/customers/{seeded['customer_id']}")
+    expect(app_page.locator("text=Seeded Lane")).to_be_visible(timeout=8000)
 
 
-def test_customer_search_in_order_form(page):
-    # Navigate directly to new order form
-    page.goto("http://localhost/orders/new")
-    page.wait_for_timeout(500)
+def test_customer_search_by_name(app_page, seeded, live_server):
+    app_page.goto(live_server + "/customers")
+    app_page.fill('input[name="q"]', "UI Customer")
+    app_page.click('button[type="submit"]')
 
-    # Type in customer search
-    page.fill('#customer-search', "UI Test")
-    page.wait_for_timeout(1000)  # Wait for HTMX debounce (300ms) + response
+    expect(app_page.locator(f"td:has-text('{seeded['customer_name']}')")).to_be_visible(timeout=8000)
 
-    # Dropdown should show the customer
-    results = page.locator('#customer-results')
-    assert "UI Test Customer" in results.text_content()
+
+def test_customer_search_empty_state(app_page, seeded, live_server):
+    app_page.goto(live_server + "/customers")
+    app_page.fill('input[name="q"]', "zzz-nobody-zzz")
+    app_page.click('button[type="submit"]')
+
+    expect(app_page.locator("text=No matches")).to_be_visible(timeout=8000)
+
+
+def test_customer_form_first_row_is_default(app_page, seeded, live_server):
+    app_page.goto(live_server + "/customers/new")
+
+    hidden = app_page.locator('input[name="addr_new_default"]').first
+    expect(hidden).to_have_value("1")
+
+
+def test_customer_delete_flow(app_page, seeded, live_server):
+    app_page.goto(live_server + f"/customers/{seeded['customer_id']}")
+
+    app_page.on("dialog", lambda d: d.accept())
+    app_page.click('button:has-text("Delete")')
+
+    expect(app_page.locator("h1:has-text('Customers')")).to_be_visible(timeout=8000)

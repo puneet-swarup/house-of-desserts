@@ -5,12 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ settings.app_name }}{% endblock %}</title>
     <link rel="icon" type="image/png" href="/static/images/logo.png" />
-
-    <!-- Pre-compiled CSS (Tailwind + daisyUI, no runtime) -->
     <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
-    <!-- HTMX (self-hosted) -->
     <script src="/static/js/htmx.min.js"></script>
-
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-base-200">
@@ -18,8 +14,6 @@
     <!-- Top Navbar -->
     <div class="navbar bg-gradient-to-r from-amber-50 to-orange-50 shadow-md sticky top-0 z-50 border-b border-amber-200">
         <div class="container mx-auto px-4 flex items-center">
-
-            <!-- Logo (clickable → Dashboard) -->
             <a href="/" class="flex items-center gap-2 mr-2">
                 <img src="/static/images/logo.png" alt="Logo"
                      class="h-9 w-9 rounded-full shadow-sm object-cover" />
@@ -34,7 +28,6 @@
                 </div>
             </a>
 
-            <!-- Nav Links -->
             <nav class="flex items-center justify-center gap-0.5 flex-1 overflow-x-auto py-1">
                 <a href="/"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if request.url.path == '/' %}btn-active bg-amber-100 text-amber-900{% endif %}">
@@ -62,7 +55,6 @@
                 </a>
             </nav>
 
-            <!-- Right: Clock -->
             <div class="flex-none flex items-center gap-2">
                 <div class="flex flex-col items-end leading-tight hidden md:flex">
                     <span id="nav-date" class="text-xs font-semibold text-amber-800"></span>
@@ -77,7 +69,7 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Mobile FAB: Quick New Order -->
+    <!-- Mobile FAB -->
     <a href="/orders/new"
        class="btn btn-circle btn-primary fixed bottom-6 right-6 z-50 shadow-lg md:hidden">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -85,30 +77,36 @@
         </svg>
     </a>
 
-    <!-- Live Clock -->
+    <!-- Toast root -->
+    <div id="toast-root" class="toast toast-end toast-bottom z-[100]"></div>
+
+    <!-- Live clock + shared helpers -->
     <script>
     function updateClock() {
         const now = new Date();
-        const dateEl = document.getElementById('nav-date');
-        const timeEl = document.getElementById('nav-time');
-        if (dateEl) dateEl.textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-        if (timeEl) timeEl.textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const d = document.getElementById('nav-date');
+        const t = document.getElementById('nav-time');
+        if (d) d.textContent = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+        if (t) t.textContent = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
     updateClock();
     setInterval(updateClock, 1000);
 
-    function setDefault(cid, addrId) {
-        fetch(`/customers/${cid}/addresses/${addrId}/set-default`, { method: 'POST' })
-            .then(r => { if (r.ok) location.reload(); });
-    }
-
-    function softDelete(cid, addrId) {
-        if (!confirm('Remove this address?')) return;
-        fetch(`/customers/${cid}/addresses/${addrId}/delete`, { method: 'POST' })
-            .then(r => { if (r.ok) location.reload(); });
+    function toast(msg, kind = 'info') {
+        const root = document.getElementById('toast-root');
+        if (!root) return;
+        const el = document.createElement('div');
+        const cls = kind === 'error' ? 'alert-error'
+                  : kind === 'success' ? 'alert-success'
+                  : 'alert-info';
+        el.className = `alert ${cls} shadow-lg`;
+        el.innerHTML = `<span>${msg}</span>`;
+        root.appendChild(el);
+        setTimeout(() => el.remove(), 3500);
     }
     </script>
 
+    {% block modals %}{% endblock %}
     {% block scripts %}{% endblock %}
 </body>
 </html>

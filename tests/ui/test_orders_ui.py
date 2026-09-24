@@ -1,55 +1,50 @@
-"""UI tests: Order creation + status flow via browser."""
+"""UI tests: Order creation, status flow, fulfillment requirement."""
+
+from playwright.sync_api import expect
 
 
-def test_create_order_via_ui(page):
-    page.click("a[href='/orders/new']")
-    page.wait_for_timeout(500)
+def _create_order(app_page, live_server, seeded, *, advance="0"):
+    app_page.goto(live_server + "/orders/new")
 
-    # Select customer via search
-    page.fill('#customer-search', "UI Test")
-    page.wait_for_timeout(800)
-    page.click("#customer-results div:first-child")
-    page.wait_for_timeout(300)
+    app_page.select_option("#customer_id", str(seeded["customer_id"]))
+    app_page.fill('input[name="fulfillment_date"]', seeded["fulfillment"])
+    app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
+    app_page.fill('input[name="quantity"]', "2")
+    app_page.fill('input[name="advance_paid"]', advance)
 
-    # Verify customer selected
-    assert page.locator('#customer-selected-label').is_visible()
-
-    # Select a product (first one in dropdown)
-    page.select_option('select[name="product_id"]', index=1)
-
-    # Set quantity
-    page.fill('input[name="quantity"]', "2")
-
-    # Set advance
-    page.fill('input[name="advance_paid"]', "100")
-
-    # Submit
-    page.click('button[type="submit"]')
-    page.wait_for_timeout(800)
-
-    # Should be on order detail page
-    assert "Items" in page.content()
-    assert "Payments" in page.content()
+    app_page.click('button[type="submit"]')
+    # Order detail page shows the "Payments" heading
+    expect(app_page.locator("h2:has-text('Payments')")).to_be_visible(timeout=10000)
 
 
-def test_status_transition_via_ui(page):
-    # Get current order (should be on detail page from previous test)
-    if "CONFIRMED" in page.content():
-        # Click "Mark In Progress"
-        page.click("button:has-text('Mark In Progress')")
-        page.wait_for_timeout(500)
-
-        # Reload to see updated status
-        page.reload()
-        page.wait_for_timeout(500)
-        assert "IN PROGRESS" in page.content()
+def test_create_order_via_ui(app_page, seeded, live_server):
+    _create_order(app_page, live_server, seeded)
+    expect(app_page.locator(f"text={seeded['product_name']}").first).to_be_visible()
 
 
-def test_mobile_fab_visible(page):
-    """The floating + button should be visible on mobile viewport."""
-    page.set_viewport_size({"width": 375, "height": 667})  # iPhone size
-    page.goto("http://localhost:8000")
-    page.wait_for_timeout(500)
+def test_status_transition_via_ui(app_page, seeded, live_server):
+    _create_order(app_page, live_server, seeded)
 
-    fab = page.locator('a[href="/orders/new"].btn-circle')
-    assert fab.is_visible()
+    app_page.select_option('select[name="status"]', "IN_PROGRESS")
+    app_page.click('button:has-text("Update")')
+
+    expect(app_page.locator("text=IN PROGRESS").first).to_be_visible(timeout=8000)
+
+
+def test_mobile_fab_visible(app_page, seeded, live_server):
+    app_page.set_viewport_size({"width": 375, "height": 667})
+    app_page.goto(live_server + "/")
+
+    fab = app_page.locator('a[href="/orders/new"].btn-circle')
+    expect(fab).to_be_visible(timeout=8000)
+
+
+def test_fulfillment_date_is_required(app_page, seeded, live_server):
+    app_page.goto(live_server + "/orders/new")
+    app_page.select_option("#customer_id", str(seeded["customer_id"]))
+    app_page.select_option('select[name="product_id"]', str(seeded["product_id"]))
+
+    app_page.fill('input[name="fulfillment_date"]', "")
+    app_page.click('button[type="submit"]')
+
+    assert "/orders/new" in app_page.url

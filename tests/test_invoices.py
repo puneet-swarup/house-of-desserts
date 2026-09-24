@@ -26,6 +26,7 @@ def test_invoice_shows_delivery_address(client, db_session, sample_order):
 def test_invoice_pickup_shows_pickup_label(client, db_session, sample_customer, sample_product):
     client.post("/orders", data={
         "customer_id": str(sample_customer.id),
+        "fulfillment_date": "2026-12-31T12:00",
         "delivery_type": "PICKUP",
         "delivery_date": "",
         "delivery_address": "",

@@ -26,18 +26,30 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Lint (ruff)
+      - name: Install Playwright browsers
+        run: playwright install --with-deps chromium
+
+      - name: Lint
         run: ruff check app tests
 
-      - name: Tests (unit)
+      - name: Unit tests
         env:
-          SECRET_KEY: ci-secret-not-real
+          SECRET_KEY: ci-secret
           DEBUG: "false"
           BUSINESS_TIMEZONE: Asia/Kolkata
         run: pytest --ignore=tests/ui -v
 
-      - name: Type check (optional, non-blocking)
-        continue-on-error: true
-        run: |
-          pip install mypy
-          mypy app --ignore-missing-imports
+      - name: UI tests
+        env:
+          SECRET_KEY: ci-secret
+          DEBUG: "false"
+          BUSINESS_TIMEZONE: Asia/Kolkata
+        run: pytest tests/ui -v
+
+      - name: Upload Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ matrix.python-version }}
+          path: test-results/
+          if-no-files-found: ignore

@@ -37,6 +37,7 @@ def test_order_totals_via_service(db, customer, product):
     from app.services.order_service import create_order
     order = create_order(db, {
         "customer_id": customer.id,
+        "fulfillment_date": "2026-12-31T12:00",
         "items": [{"product_id": product.id, "quantity": 3}],
         "advance_paid": 100.00,
     })

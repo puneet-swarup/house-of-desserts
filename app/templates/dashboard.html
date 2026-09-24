@@ -4,8 +4,10 @@
 {% block content %}
 <div class="space-y-6">
 
+    <h1 class="text-2xl font-extrabold text-amber-900">Dashboard</h1>
+
     <!-- Stat Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body p-4">
                 <div class="flex justify-between items-center">
@@ -26,12 +28,12 @@
             <div class="card-body p-4">
                 <div class="flex justify-between items-center">
                     <div>
-                        <p class="text-sm text-base-content/60">Pending Delivery</p>
-                        <p class="text-2xl font-bold">{{ stats.pending_delivery }}</p>
+                        <p class="text-sm text-base-content/60">Fulfillments Today</p>
+                        <p class="text-2xl font-bold">{{ stats.fulfillments_today }}</p>
                     </div>
                     <div class="avatar placeholder">
                         <div class="bg-warning/10 text-warning rounded-full w-12 h-12 flex items-center justify-center">
-                            <span class="text-xl">🚚</span>
+                            <span class="text-xl">⏰</span>
                         </div>
                     </div>
                 </div>
@@ -42,7 +44,7 @@
             <div class="card-body p-4">
                 <div class="flex justify-between items-center">
                     <div>
-                        <p class="text-sm text-base-content/60">Outstanding Balance</p>
+                        <p class="text-sm text-base-content/60">Outstanding</p>
                         <p class="text-2xl font-bold">{{ settings.currency }}{{ '{:,.0f}'.format(stats.outstanding_balance) }}</p>
                     </div>
                     <div class="avatar placeholder">
@@ -58,7 +60,7 @@
             <div class="card-body p-4">
                 <div class="flex justify-between items-center">
                     <div>
-                        <p class="text-sm text-base-content/60">Total Products</p>
+                        <p class="text-sm text-base-content/60">Active Products</p>
                         <p class="text-2xl font-bold">{{ stats.total_products }}</p>
                     </div>
                     <div class="avatar placeholder">
@@ -71,11 +73,19 @@
         </div>
     </div>
 
-    <!-- Recent Orders Table -->
+    <!-- Ready for pickup/delivery -->
+    {% if stats.ready_count > 0 %}
+    <div class="alert alert-success shadow-sm">
+        <span>🎉 <strong>{{ stats.ready_count }}</strong> order{{ 's' if stats.ready_count != 1 else '' }} ready for pickup or delivery.</span>
+        <a href="/orders?status=READY" class="btn btn-sm btn-success">View</a>
+    </div>
+    {% endif %}
+
+    <!-- Recent Orders -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
             <div class="flex justify-between items-center mb-2">
-                <h2 class="card-title text-lg">Recent Orders</h2>
+                <h2 class="card-title text-base">Recent Orders</h2>
                 <a href="/orders" class="btn btn-sm btn-ghost">View All →</a>
             </div>
 
@@ -83,18 +93,20 @@
             <div class="overflow-x-auto">
                 <table class="table table-sm">
                     <thead>
-                        <tr>
+                        <tr class="text-amber-900">
                             <th>Order #</th>
                             <th>Customer</th>
                             <th>Status</th>
-                            <th>Amount</th>
-                            <th>Date</th>
+                            <th class="text-right">Amount</th>
+                            <th>Fulfillment</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for order in recent_orders %}
                         <tr>
-                            <td class="font-mono text-sm">{{ order.order_number }}</td>
+                            <td class="font-mono text-sm">
+                                <a href="/orders/{{ order.id }}" class="hover:underline">{{ order.order_number }}</a>
+                            </td>
                             <td>{{ order.customer.name }}</td>
                             <td>
                                 {% set badge_colors = {
@@ -106,12 +118,18 @@
                                     'PAID': 'badge-success',
                                     'CANCELLED': 'badge-error'
                                 } %}
-                                <span class="badge {{ badge_colors.get(order.status.value, 'badge-ghost') }}">
+                                <span class="badge {{ badge_colors.get(order.status.value, 'badge-ghost') }} badge-sm">
                                     {{ order.status.value.replace('_', ' ') }}
                                 </span>
                             </td>
-                            <td>{{ settings.currency }}{{ "{:,.2f}".format(order.total_amount) }}</td>
-                            <td class="text-base-content/60 text-sm">{{ order.order_date.strftime('%d %b %Y') }}</td>
+                            <td class="text-right">{{ order.total_amount|money }}</td>
+                            <td class="text-base-content/60 text-sm">
+                                {% if order.fulfillment_date %}
+                                    {{ order.fulfillment_date|dt }}
+                                {% else %}
+                                    <span class="text-base-content/30">—</span>
+                                {% endif %}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -120,7 +138,7 @@
             {% else %}
             <div class="text-center py-8 text-base-content/50">
                 <p class="text-4xl mb-2">🧁</p>
-                <p>No orders yet. <a href="/orders" class="link">Create your first order</a>.</p>
+                <p>No orders yet. <a href="/orders/new" class="link">Create your first order</a>.</p>
             </div>
             {% endif %}
         </div>

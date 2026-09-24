@@ -104,6 +104,13 @@ def create_order(db: Session, data: dict) -> Order:
 
 
 def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
+    fulfillment_date = _parse_dt(data.get("fulfillment_date"))
+    if not fulfillment_date:
+        raise HTTPException(
+            status_code=400,
+            detail="Fulfillment date is required",
+        )
+
     order_number = next_order_number(db)
 
     order = Order(
@@ -112,7 +119,7 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
         status=OrderStatus.CONFIRMED,
         order_date=_parse_dt(data.get("order_date")) or utcnow(),
         delivery_type=data.get("delivery_type", "PICKUP"),
-        fulfillment_date=_parse_dt(data.get("fulfillment_date")),
+        fulfillment_date=fulfillment_date,
         delivery_address=data.get("delivery_address") or None,
         notes=data.get("notes") or None,
     )

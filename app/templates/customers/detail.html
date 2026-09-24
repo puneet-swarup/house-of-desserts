@@ -5,39 +5,31 @@
 <div class="max-w-2xl mx-auto space-y-4">
 
     <!-- Header -->
-    <div class="flex justify-between items-center">
+    <div class="flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-2xl font-extrabold text-amber-900">{{ customer.name }}</h1>
         <div class="flex gap-2">
-            <a href="/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm gap-1 font-semibold">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                </svg>
-                Edit
-            </a>
-            <button type="button" class="btn btn-outline btn-sm btn-error gap-1"
+            <a href="/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+            <button type="button" class="btn btn-outline btn-sm btn-error"
                     onclick="softDelete({{ customer.id }})">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                </svg>
                 Delete
             </button>
             <a href="/customers" class="btn btn-ghost btn-sm">← All</a>
         </div>
     </div>
 
-    <!-- Customer Details (read-only, same layout as edit form) -->
+    <!-- Customer Details (read-only) -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer Details</h2>
 
             <div class="form-control">
                 <label class="label"><span class="label-text font-semibold">Full Name</span></label>
-                <input type="text" value="{{ customer.name }}" class="input input-bordered w-full" disabled />
+                <input type="text" value="{{ customer.name or '' }}" class="input input-bordered w-full" disabled />
             </div>
 
             <div class="form-control">
                 <label class="label"><span class="label-text font-semibold">Phone</span></label>
-                <input type="text" value="{{ customer.phone }}" class="input input-bordered w-full font-mono" disabled />
+                <input type="text" value="{{ customer.phone or '' }}" class="input input-bordered w-full font-mono" disabled />
             </div>
 
             <div class="form-control">
@@ -48,8 +40,11 @@
 
             <div class="form-control">
                 <label class="label"><span class="label-text font-semibold">Notes / Preferences</span></label>
-                <input type="text" value="{{ customer.notes or '' }}" class="input input-bordered w-full" disabled
-                       placeholder="No notes" />
+                {% if customer.notes %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300 text-sm whitespace-pre-line">{{ customer.notes }}</div>
+                {% else %}
+                    <div class="p-3 rounded-lg bg-base-200 border border-base-300 text-sm text-base-content/40">No notes</div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -64,14 +59,22 @@
             <div class="space-y-3">
                 {% for addr in active_addrs %}
                 <div class="p-3 rounded-lg bg-base-200 border border-base-300">
-                    <div class="flex items-center gap-2">
-                        <input type="text" value="{{ addr.label }}" class="input input-bordered input-sm w-20 shrink-0 font-semibold" disabled />
-                        <input type="text" value="{{ addr.line }}" class="input input-bordered input-sm flex-1" disabled />
-                        <label class="cursor-not-allowed flex items-center gap-1 shrink-0 opacity-50">
-                            <input type="checkbox" {% if addr.is_default %}checked{% endif %}
-                                   class="toggle toggle-sm toggle-amber" disabled />
-                            <span class="text-[10px] text-base-content/50">Def</span>
-                        </label>
+                    <div style="display: flex; gap: 0.5rem; align-items: flex-start; width: 100%;">
+                        <div class="input input-bordered input-sm"
+                             style="width: 5.5rem; flex-shrink: 0; font-weight: 600; display: flex; align-items: center;">
+                            {{ addr.label or 'Home' }}
+                        </div>
+                        <div class="textarea textarea-bordered textarea-sm"
+                             style="flex: 1 1 0%; min-width: 0; white-space: pre-line; min-height: 2.5rem; padding-top: 0.4rem;">
+                            {{ addr.line or '' }}
+                        </div>
+                        <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 3.5rem;">
+                            {% if addr.is_default %}
+                                <span class="badge badge-success badge-sm">Default</span>
+                            {% else %}
+                                <span class="badge badge-ghost badge-sm">—</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
                 {% endfor %}
@@ -85,32 +88,47 @@
     <!-- Order History -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
-            <h2 class="card-title text-lg">Order History</h2>
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Order History</h2>
 
             {% if customer.orders %}
             <div class="overflow-x-auto">
                 <table class="table table-sm">
                     <thead>
-                        <tr>
+                        <tr class="text-amber-900">
                             <th>Order #</th>
-                            <th>Date</th>
+                            <th>Placed</th>
                             <th>Status</th>
-                            <th>Amount</th>
-                            <th>Balance</th>
+                            <th class="text-right">Amount</th>
+                            <th class="text-right">Balance</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for order in customer.orders %}
                         <tr>
-                            <td><a href="/orders/{{ order.id }}" class="font-mono text-sm hover:underline">{{ order.order_number }}</a></td>
-                            <td class="text-sm">{{ order.order_date.strftime('%d %b %Y') }}</td>
                             <td>
-                                <span class="badge badge-ghost badge-sm">{{ order.status.value.replace('_', ' ') }}</span>
+                                <a href="/orders/{{ order.id }}" class="font-mono text-sm hover:underline">
+                                    {{ order.order_number }}
+                                </a>
                             </td>
-                            <td>{{ settings.currency }}{{ "{:,.2f}".format(order.total_amount) }}</td>
+                            <td class="text-sm">{{ order.order_date|d }}</td>
                             <td>
+                                {% set badge_colors = {
+                                    'INQUIRY': 'badge-ghost',
+                                    'CONFIRMED': 'badge-info',
+                                    'IN_PROGRESS': 'badge-warning',
+                                    'READY': 'badge-success',
+                                    'DELIVERED': 'badge-primary',
+                                    'PAID': 'badge-success',
+                                    'CANCELLED': 'badge-error'
+                                } %}
+                                <span class="badge {{ badge_colors.get(order.status.value, 'badge-ghost') }} badge-sm">
+                                    {{ order.status.value.replace('_', ' ') }}
+                                </span>
+                            </td>
+                            <td class="text-right">{{ order.total_amount|money }}</td>
+                            <td class="text-right">
                                 {% if order.balance_due > 0 %}
-                                    <span class="text-error font-semibold">{{ settings.currency }}{{ "{:,.2f}".format(order.balance_due) }}</span>
+                                    <span class="text-error font-semibold">{{ order.balance_due|money }}</span>
                                 {% else %}
                                     <span class="text-success">Paid</span>
                                 {% endif %}
@@ -131,10 +149,14 @@
 
 {% block scripts %}
 <script>
-function softDelete(customerId) {
+async function softDelete(customerId) {
     if (!confirm('Delete this customer? Their addresses will also be removed. This cannot be undone from the UI.')) return;
-    fetch(`/customers/${customerId}/delete`, { method: 'POST' })
-        .then(r => { if (r.ok) location.href = '/customers'; });
+    const r = await fetch(`/customers/${customerId}/delete`, { method: 'POST' });
+    if (r.ok) {
+        location.href = '/customers';
+    } else {
+        toast('Failed to delete', 'error');
+    }
 }
 </script>
 {% endblock %}

@@ -179,7 +179,8 @@ def sample_product(db):
 
 @pytest.fixture()
 def sample_order(db, sample_customer, sample_product):
-    """Delivery order with one item — matches expectations in existing tests."""
+    from datetime import datetime, timedelta
+
     from app.services.order_service import create_order
 
     return create_order(db, {
@@ -187,4 +188,5 @@ def sample_order(db, sample_customer, sample_product):
         "items": [{"product_id": sample_product.id, "quantity": 1}],
         "delivery_type": "DELIVERY",
         "delivery_address": "123 Test Street, Test City",
+        "fulfillment_date": (datetime.now() + timedelta(days=1)).isoformat(),
     })

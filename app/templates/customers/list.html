@@ -6,7 +6,7 @@
 
     <div class="flex justify-between items-center">
         <h1 class="text-2xl font-extrabold text-amber-900">Customers</h1>
-        <a href="/customers/new" class="btn btn-amber btn-sm gap-2 font-bold shadow-sm hover:shadow-md">
+        <a href="/customers/new" class="btn btn-amber btn-sm gap-2 font-semibold">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
             </svg>
@@ -14,76 +14,102 @@
         </a>
     </div>
 
+    <!-- Search -->
+    <form method="get" action="/customers" class="flex gap-2">
+        <input type="search" name="q" value="{{ meta.q }}"
+               placeholder="Search by name or phone…"
+               class="input input-bordered flex-1" autocomplete="off" />
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if meta.q %}
+        <a href="/customers" class="btn btn-ghost">Clear</a>
+        {% endif %}
+    </form>
+
     {% if customers %}
     <div class="card bg-base-100 shadow-sm">
-        <div class="card-body p-0">
-            <div class="overflow-x-auto">
-                <table class="table table-sm">
-                    <thead>
-                        <tr class="text-amber-900">
-                            <th>Name</th>
-                            <th>Phone</th>
-                            <th>Email</th>
-                            <th>Orders</th>
-                            <th>Since</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for customer in customers %}
-                        <tr class="hover {% if not customer.is_active %}opacity-40{% endif %}">
-                            <td>
-                                <a href="/customers/{{ customer.id }}" class="font-semibold hover:underline">
-                                    {{ customer.name }}
-                                </a>
-                                {% if not customer.is_active %}
-                                <span class="badge badge-ghost badge-xs ml-1">Deleted</span>
+        <div class="overflow-x-auto">
+            <table class="table table-sm">
+                <thead>
+                    <tr class="text-amber-900">
+                        <th>Name</th>
+                        <th>Phone</th>
+                        <th class="hidden sm:table-cell">Email</th>
+                        <th class="hidden md:table-cell">Orders</th>
+                        <th class="hidden md:table-cell">Since</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for customer in customers %}
+                    <tr class="hover {% if not customer.is_active %}opacity-40{% endif %}">
+                        <td>
+                            <a href="/customers/{{ customer.id }}" class="font-semibold hover:underline">
+                                {{ customer.name }}
+                            </a>
+                            {% if not customer.is_active %}
+                            <span class="badge badge-ghost badge-xs ml-1">Deleted</span>
+                            {% endif %}
+                        </td>
+                        <td class="font-mono text-sm">{{ customer.phone }}</td>
+                        <td class="hidden sm:table-cell text-base-content/60 text-sm">{{ customer.email or '—' }}</td>
+                        <td class="hidden md:table-cell">
+                            <span class="badge badge-ghost badge-sm">{{ customer.orders|length }}</span>
+                        </td>
+                        <td class="hidden md:table-cell text-base-content/50 text-sm">
+                            {{ customer.created_at|d }}
+                        </td>
+                        <td>
+                            <div class="flex gap-1 justify-end">
+                                {% if customer.is_active %}
+                                <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
+                                <button type="button" class="btn btn-outline btn-xs btn-error"
+                                        onclick="softDeleteCustomer({{ customer.id }})">
+                                    Delete
+                                </button>
                                 {% endif %}
-                            </td>
-                            <td class="font-mono text-sm">{{ customer.phone }}</td>
-                            <td class="text-base-content/60 text-sm">{{ customer.email or '—' }}</td>
-                            <td><span class="badge badge-ghost badge-sm">{{ customer.orders|length }}</span></td>
-                            <td class="text-base-content/50 text-sm">{{ customer.created_at.strftime('%d %b %Y') }}</td>
-                            <td>
-                                <div class="flex gap-1">
-                                    {% if customer.is_active %}
-                                    <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline btn-xs btn-info gap-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                        </svg>
-                                        Edit
-                                    </a>
-                                    <button type="button" class="btn btn-outline btn-xs btn-error gap-1"
-                                            onclick="softDelete({{ customer.id }})">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                                        </svg>
-                                        Delete
-                                    </button>
-                                    {% else %}
-                                    <span class="text-xs text-base-content/40">—</span>
-                                    {% endif %}
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
         </div>
     </div>
+
+    <!-- Pagination -->
+    {% if meta.pages > 1 %}
+    <div class="flex justify-between items-center">
+        <p class="text-sm text-base-content/60">
+            Showing {{ customers|length }} of {{ meta.total }} (page {{ meta.page }} of {{ meta.pages }})
+        </p>
+        <div class="join">
+            {% if meta.has_prev %}
+            <a href="/customers?q={{ meta.q }}&page={{ meta.page - 1 }}" class="join-item btn btn-sm">« Prev</a>
+            {% else %}
+            <button class="join-item btn btn-sm" disabled>« Prev</button>
+            {% endif %}
+            {% if meta.has_next %}
+            <a href="/customers?q={{ meta.q }}&page={{ meta.page + 1 }}" class="join-item btn btn-sm">Next »</a>
+            {% else %}
+            <button class="join-item btn btn-sm" disabled>Next »</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% else %}
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body text-center py-12">
             <p class="text-5xl mb-4">👥</p>
-            <h2 class="text-xl font-bold">No customers yet</h2>
-            <p class="text-base-content/60 mt-1">Add your first customer to start taking orders.</p>
-            <a href="/customers/new" class="btn btn-amber mt-4 gap-2 font-bold">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                </svg>
-                Add Customer
-            </a>
+            {% if meta.q %}
+                <h2 class="text-xl font-bold">No matches for "{{ meta.q }}"</h2>
+                <p class="text-base-content/60 mt-1">Try a different name or phone number.</p>
+                <a href="/customers" class="btn btn-ghost mt-4">Clear search</a>
+            {% else %}
+                <h2 class="text-xl font-bold">No customers yet</h2>
+                <p class="text-base-content/60 mt-1">Add your first customer to start taking orders.</p>
+                <a href="/customers/new" class="btn btn-amber mt-4">+ Add Customer</a>
+            {% endif %}
         </div>
     </div>
     {% endif %}
@@ -93,10 +119,15 @@
 
 {% block scripts %}
 <script>
-function softDelete(customerId) {
+async function softDeleteCustomer(id) {
     if (!confirm('Delete this customer? Their addresses will also be removed. This cannot be undone from the UI.')) return;
-    fetch(`/customers/${customerId}/delete`, { method: 'POST' })
-        .then(r => { if (r.ok) location.reload(); });
+    const r = await fetch(`/customers/${id}/delete`, { method: 'POST' });
+    if (r.ok) {
+        toast('Customer deleted', 'success');
+        setTimeout(() => location.reload(), 500);
+    } else {
+        toast('Failed to delete', 'error');
+    }
 }
 </script>
 {% endblock %}
