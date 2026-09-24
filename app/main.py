@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI):
     Path(settings.backup_dir).mkdir(exist_ok=True)
 
     from app import models  # noqa: F401
+
     Base.metadata.create_all(engine)
 
     yield
@@ -86,10 +87,12 @@ from app.routers import (  # noqa: E402
     invoices,
     orders,
     products,
+    today,
 )
 from app.routers import settings as settings_router  # noqa: E402
 
 app.include_router(dashboard.router, tags=["dashboard"])
+app.include_router(today.router, tags=["today"])
 app.include_router(orders.router, prefix="/orders", tags=["orders"])
 app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(products.router, prefix="/products", tags=["products"])
@@ -97,6 +100,14 @@ app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
 app.include_router(export.router, prefix="/export", tags=["export"])
 app.include_router(audit.router, prefix="/audit", tags=["audit"])
 app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
+
+from fastapi.responses import RedirectResponse
+
+
+@app.get("/", include_in_schema=False)
+def root():
+    """Today is the home page."""
+    return RedirectResponse(url="/today", status_code=307)
 
 
 @app.get("/health")

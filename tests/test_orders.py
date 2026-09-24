@@ -3,6 +3,8 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from app.config import get_settings
 from app.models import Order, OrderStatus
 
@@ -82,19 +84,27 @@ def test_status_transition_forward(client, db_session, sample_order):
     assert sample_order.status == OrderStatus.IN_PROGRESS
 
 
-def test_full_payment_sets_paid(client, db_session, sample_order):
-    assert sample_order.balance_due > 0
-    client.post(
-        f"/orders/{sample_order.id}/payments",
-        data={
-            "amount": str(sample_order.balance_due),
-            "method": "UPI",
-            "reference": "TXN123",
-        },
-    )
+def test_full_payment_clears_balance_without_auto_status(db_session, sample_order):
+    """Full payment clears balance but does NOT skip the fulfillment workflow."""
+    from app.services.order_service import record_payment
+
+    record_payment(db_session, sample_order.id, sample_order.balance_due, "CASH", None)
     db_session.refresh(sample_order)
+
     assert sample_order.balance_due == 0
-    assert sample_order.status == OrderStatus.PAID
+    assert sample_order.payment_state == "paid"
+    # Status is unchanged — still CONFIRMED, workflow continues
+    assert sample_order.status.value == "CONFIRMED"
+
+
+def test_settle_requires_delivered(db_session, sample_order):
+    """Cannot jump to PAID from CONFIRMED — must complete delivery first."""
+    from fastapi import HTTPException
+
+    from app.services.order_service import update_status
+
+    with pytest.raises(HTTPException):
+        update_status(db_session, sample_order.id, "PAID")
 
 
 def test_partial_payment_reduces_balance(client, db_session, sample_order):

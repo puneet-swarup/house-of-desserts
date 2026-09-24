@@ -85,7 +85,7 @@
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
             <div class="flex justify-between items-center mb-2">
-                <h2 class="card-title text-base">Recent Orders</h2>
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Recent Orders</h2>
                 <a href="/orders" class="btn btn-sm btn-ghost">View All →</a>
             </div>
 
@@ -96,9 +96,10 @@
                         <tr class="text-amber-900">
                             <th>Order #</th>
                             <th>Customer</th>
-                            <th>Status</th>
-                            <th class="text-right">Amount</th>
                             <th>Fulfillment</th>
+                            <th>Payment</th>
+                            <th class="text-right">Amount</th>
+                            <th class="hidden md:table-cell">Date</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -109,27 +110,17 @@
                             </td>
                             <td>{{ order.customer.name }}</td>
                             <td>
-                                {% set badge_colors = {
-                                    'INQUIRY': 'badge-ghost',
-                                    'CONFIRMED': 'badge-info',
-                                    'IN_PROGRESS': 'badge-warning',
-                                    'READY': 'badge-success',
-                                    'DELIVERED': 'badge-primary',
-                                    'PAID': 'badge-success',
-                                    'CANCELLED': 'badge-error'
-                                } %}
-                                <span class="badge {{ badge_colors.get(order.status.value, 'badge-ghost') }} badge-sm">
+                                <span class="badge {{ order.status_badge_class }} badge-sm">
                                     {{ order.status.value.replace('_', ' ') }}
                                 </span>
                             </td>
-                            <td class="text-right">{{ order.total_amount|money }}</td>
-                            <td class="text-base-content/60 text-sm">
-                                {% if order.fulfillment_date %}
-                                    {{ order.fulfillment_date|dt }}
-                                {% else %}
-                                    <span class="text-base-content/30">—</span>
-                                {% endif %}
+                            <td>
+                                <span class="badge {{ order.payment_badge_class }} badge-sm">
+                                    {{ order.payment_label }}
+                                </span>
                             </td>
+                            <td class="text-right">{{ order.total_amount|money }}</td>
+                            <td class="hidden md:table-cell text-base-content/60 text-sm">{{ order.order_date|d }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
