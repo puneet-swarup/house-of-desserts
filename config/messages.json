@@ -1,0 +1,8 @@
+{
+  "confirmed": "Hi {customer_first_name}, your order {order_number} for {total} is confirmed. Expected {fulfillment_datetime}. — {business_name}",
+  "ready": "Hi {customer_first_name}, your order {order_number} is ready for {delivery_or_pickup}. {fulfillment_datetime}. — {business_name}",
+  "out_for_delivery": "Hi {customer_first_name}, your order {order_number} is on the way to {delivery_address}. Balance due on delivery: {balance}. — {business_name}",
+  "delivered": "Hi {customer_first_name}, your order {order_number} has been delivered. Thanks for choosing {business_name}!",
+  "payment_reminder": "Hi {customer_first_name}, a gentle reminder — balance of {balance} on order {order_number} is pending. Total {total}, paid {paid}. — {business_name}",
+  "custom": "Hi {customer_first_name}, "
+}

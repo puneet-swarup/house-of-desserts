@@ -42,9 +42,8 @@ settings = get_settings()
 
 def list_orders(db: Session, status: str = "ALL") -> list[Order]:
     """
-    Sort:
-      1. fulfillment_date ASC, NULLs last
-      2. order_date DESC
+    Unpaginated list — kept for existing callers.
+    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
     """
     from sqlalchemy import nullslast
 
@@ -59,6 +58,81 @@ def list_orders(db: Session, status: str = "ALL") -> list[Order]:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
         query = query.where(Order.status == status_enum)
     return list(db.execute(query).scalars().all())
+
+
+def search_orders(
+    db: Session,
+    q: str | None = None,
+    status: str = "ALL",
+    page: int = 1,
+    per_page: int = 25,
+) -> tuple[list[Order], dict]:
+    """
+    Paginated order list with optional status filter and text search.
+
+    Search matches (case-insensitive, substring):
+      - Order number, e.g. "0007" matches "HOD-2026-0007"
+      - Customer name
+      - Customer phone, digits only (so "99999" matches "+91 99999 99999")
+
+    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
+    """
+    from sqlalchemy import func, nullslast, or_
+
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
+
+    conditions = []
+    if status != "ALL":
+        try:
+            status_enum = OrderStatus(status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
+        conditions.append(Order.status == status_enum)
+
+    if q:
+        term = f"%{q.strip()}%"
+        phone_digits = "".join(c for c in q if c.isdigit())
+        ors = [
+            Order.order_number.ilike(term),
+            Customer.name.ilike(term),
+        ]
+        if len(phone_digits) >= 3:
+            ors.append(Customer.phone.ilike(f"%{phone_digits}%"))
+        conditions.append(or_(*ors))
+
+    base = (
+        select(Order)
+        .join(Customer, Order.customer_id == Customer.id)
+        .order_by(
+            nullslast(Order.fulfillment_date.asc()),
+            Order.order_date.desc(),
+        )
+    )
+    count_q = select(func.count(Order.id)).join(Customer, Order.customer_id == Customer.id)
+    if conditions:
+        base = base.where(*conditions)
+        count_q = count_q.where(*conditions)
+
+    total = db.execute(count_q).scalar() or 0
+    pages = (total + per_page - 1) // per_page if total else 1
+    if page > pages:
+        page = pages
+    offset = (page - 1) * per_page
+
+    rows = list(db.execute(base.limit(per_page).offset(offset)).scalars().all())
+
+    meta = {
+        "q": q or "",
+        "status": status,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+    return rows, meta
 
 
 def get_order(db: Session, order_id: int) -> Order:

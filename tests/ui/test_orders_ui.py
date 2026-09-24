@@ -48,3 +48,14 @@ def test_fulfillment_date_is_required(app_page, seeded, live_server):
     app_page.click('button[type="submit"]')
 
     assert "/orders/new" in app_page.url
+
+
+def test_order_search_via_ui(app_page, seeded, live_server):
+    # Create an order for the seeded customer
+    _create_order(app_page, live_server, seeded)
+
+    app_page.goto(live_server + "/orders")
+    app_page.fill('input[name="q"]', seeded["customer_name"])
+    app_page.click('button:has-text("Search")')
+
+    expect(app_page.locator(f"text={seeded['customer_name']}").first).to_be_visible(timeout=8000)

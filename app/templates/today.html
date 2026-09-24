@@ -78,25 +78,32 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% set next_status = {
-                                    'INQUIRY': 'CONFIRMED',
-                                    'CONFIRMED': 'IN_PROGRESS',
-                                    'IN_PROGRESS': 'READY',
-                                    'READY': 'DELIVERED',
-                                    'DELIVERED': 'PAID'
-                                }.get(order.status.value) %}
-                                {% if next_status %}
-                                <form hx-post="/orders/{{ order.id }}/status"
-                                      hx-vals='{"status": "{{ next_status }}"}'
-                                      hx-swap="none"
-                                      hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
-                                    <button class="btn btn-xs btn-primary whitespace-nowrap">
-                                        {{ next_status.replace('_', ' ') }}
-                                    </button>
-                                </form>
-                                {% else %}
-                                <span class="text-xs text-base-content/40">—</span>
-                                {% endif %}
+                                <div class="flex gap-1 flex-wrap">
+                                    {% set wa = order.wa_ready %}
+                                    {% if wa %}
+                                    <a href="{{ wa.url }}" target="_blank" rel="noopener"
+                                       class="btn btn-xs btn-outline"
+                                       title="Message: {{ wa.label }}">💬</a>
+                                    {% endif %}
+
+                                    {% set next_status = {
+                                        'INQUIRY': 'CONFIRMED',
+                                        'CONFIRMED': 'IN_PROGRESS',
+                                        'IN_PROGRESS': 'READY',
+                                        'READY': 'DELIVERED',
+                                        'DELIVERED': 'PAID'
+                                    }.get(order.status.value) %}
+                                    {% if next_status %}
+                                    <form hx-post="/orders/{{ order.id }}/status"
+                                          hx-vals='{"status": "{{ next_status }}"}'
+                                          hx-swap="none"
+                                          hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+                                        <button class="btn btn-xs btn-primary whitespace-nowrap">
+                                            {{ next_status.replace('_', ' ') }}
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}

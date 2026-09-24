@@ -10,6 +10,11 @@
             <p class="text-sm text-base-content/60">Placed {{ order.order_date|dt }}</p>
         </div>
         <div class="flex gap-2 flex-wrap">
+            {% if whatsapp_messages %}
+            <button type="button" class="btn btn-outline btn-sm" onclick="openWa()">
+                💬 Message Customer
+            </button>
+            {% endif %}
             {% if order.status.value == 'CONFIRMED' %}
             <a href="/orders/{{ order.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
             {% endif %}
@@ -119,7 +124,7 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Status</h2>
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Fulfillment</h2>
 
                 <div class="flex flex-wrap gap-2 mb-3">
                     <span class="badge {{ order.status_badge_class }}">{{ order.status.value.replace('_', ' ') }}</span>
@@ -207,4 +212,85 @@
     {% endif %}
 
 </div>
+{% endblock %}
+
+{% block modals %}
+{% if whatsapp_messages %}
+<dialog id="wa-modal" class="modal modal-bottom sm:modal-middle"
+        onclick="if (event.target === this) closeWa()">
+    <div class="modal-box max-w-lg">
+        <h3 class="font-extrabold text-lg text-amber-900">Message {{ order.customer.name }}</h3>
+        <p class="text-xs text-base-content/60 mt-1 mb-3">
+            Pick a message. Edit the text if needed. Opens WhatsApp ready to send.
+        </p>
+
+        <div class="form-control">
+            <label class="label"><span class="label-text font-semibold">Message type</span></label>
+            <select id="wa-trigger" class="select select-bordered w-full"
+                    onchange="waUpdate()">
+                {% for m in whatsapp_messages %}
+                <option value="{{ m.key }}">{{ m.label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-control mt-3">
+            <label class="label"><span class="label-text font-semibold">Message</span></label>
+            <textarea id="wa-text" rows="6" class="textarea textarea-bordered w-full"
+                      oninput="waSync()"></textarea>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn btn-ghost" onclick="closeWa()">Cancel</button>
+            <button type="button" class="btn btn-outline" onclick="waCopy()">Copy</button>
+            <a id="wa-open" href="#" target="_blank" rel="noopener" class="btn btn-primary">Open WhatsApp</a>
+        </div>
+    </div>
+</dialog>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const WA_MESSAGES = {{ whatsapp_messages|tojson if whatsapp_messages else '[]' }};
+let waCurrentUrl = '';
+
+function openWa() {
+    if (!WA_MESSAGES.length) return;
+    document.getElementById('wa-trigger').selectedIndex = 0;
+    waUpdate();
+    document.getElementById('wa-modal').showModal();
+}
+function closeWa() {
+    document.getElementById('wa-modal').close();
+}
+function waUpdate() {
+    const key = document.getElementById('wa-trigger').value;
+    const found = WA_MESSAGES.find(m => m.key === key);
+    if (!found) return;
+    document.getElementById('wa-text').value = found.message;
+    waCurrentUrl = found.url;
+    document.getElementById('wa-open').href = found.url;
+}
+function waSync() {
+    // User edited the text — rebuild the URL client-side
+    const phone = {{ order.customer.phone|tojson }};
+    const text = document.getElementById('wa-text').value;
+    const digits = phone.replace(/\D+/g, '');
+    const normalized = (digits.length === 10)
+        ? ('{{ settings.whatsapp_default_country_code }}' + digits)
+        : digits;
+    document.getElementById('wa-open').href =
+        `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+}
+async function waCopy() {
+    const text = document.getElementById('wa-text').value;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast('Message copied', 'success');
+    } catch (e) {
+        toast('Copy failed — select and copy manually', 'error');
+    }
+}
+</script>
 {% endblock %}
