@@ -4,12 +4,15 @@
 {% block content %}
 <div class="max-w-4xl mx-auto space-y-4">
 
-    <div class="flex items-center justify-between">
+    <div class="flex items-center justify-between flex-wrap gap-2">
         <div>
             <h1 class="text-2xl font-extrabold text-amber-900">{{ order.order_number }}</h1>
             <p class="text-sm text-base-content/60">Placed {{ order.order_date|dt }}</p>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+            {% if order.status.value == 'CONFIRMED' %}
+            <a href="/orders/{{ order.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
+            {% endif %}
             <a href="/invoices/orders/{{ order.id }}/invoice" class="btn btn-outline btn-sm" target="_blank">Invoice</a>
             <a href="/orders" class="btn btn-ghost btn-sm">Back</a>
         </div>

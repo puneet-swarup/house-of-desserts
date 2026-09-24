@@ -9,10 +9,23 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Customer, Product
-from app.services import order_service
+from app.models import Customer, OrderStatus, Product
+from app.services import invoice_service, order_service
 
 router = APIRouter()
+
+
+def _default_fulfillment() -> str:
+    tomorrow_noon = (datetime.now() + timedelta(days=1)).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    return tomorrow_noon.strftime("%Y-%m-%dT%H:%M")
+
+
+def _product_and_customer_choices(db: Session):
+    customers = db.query(Customer).where(Customer.is_active.is_(True)).order_by(Customer.name).all()
+    products = db.query(Product).where(Product.is_active.is_(True)).order_by(Product.name).all()
+    return customers, products
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -35,24 +48,7 @@ def list_orders_page(request: Request, status: str = "ALL", db: Session = Depend
 def new_order_form(request: Request, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
-    customers = (
-        db.query(Customer)
-        .where(Customer.is_active.is_(True))
-        .order_by(Customer.name)
-        .all()
-    )
-    products = (
-        db.query(Product)
-        .where(Product.is_active.is_(True))
-        .order_by(Product.name)
-        .all()
-    )
-
-    # Default fulfillment: tomorrow at 12:00, in the format datetime-local wants.
-    tomorrow_noon = (datetime.now() + timedelta(days=1)).replace(
-        hour=12, minute=0, second=0, microsecond=0
-    )
-    default_fulfillment = tomorrow_noon.strftime("%Y-%m-%dT%H:%M")
+    customers, products = _product_and_customer_choices(db)
 
     return templates.TemplateResponse(
         request=request,
@@ -62,7 +58,9 @@ def new_order_form(request: Request, db: Session = Depends(get_db)):
             "customers": customers,
             "products": products,
             "today_date": datetime.now().strftime("%Y-%m-%d"),
-            "default_fulfillment": default_fulfillment,
+            "default_fulfillment": _default_fulfillment(),
+            "mode": "create",
+            "form_action": "/orders/",
         },
     )
 
@@ -86,8 +84,7 @@ def create_order(
     settings = request.app.state.settings
 
     items = [
-        {"product_id": pid, "quantity": qty}
-        for pid, qty in zip(product_id, quantity, strict=True)
+        {"product_id": pid, "quantity": qty} for pid, qty in zip(product_id, quantity, strict=True)
     ]
 
     data = {
@@ -106,18 +103,7 @@ def create_order(
         order = order_service.create_order(db, data)
     except Exception as exc:
         db.rollback()
-        customers = (
-            db.query(Customer)
-            .where(Customer.is_active.is_(True))
-            .order_by(Customer.name)
-            .all()
-        )
-        products = (
-            db.query(Product)
-            .where(Product.is_active.is_(True))
-            .order_by(Product.name)
-            .all()
-        )
+        customers, products = _product_and_customer_choices(db)
         return templates.TemplateResponse(
             request=request,
             name="orders/form.html",
@@ -126,6 +112,96 @@ def create_order(
                 "customers": customers,
                 "products": products,
                 "today_date": datetime.now().strftime("%Y-%m-%d"),
+                "default_fulfillment": _default_fulfillment(),
+                "mode": "create",
+                "form_action": "/orders/",
+                "error": str(exc),
+                "form_data": data,
+            },
+            status_code=400,
+        )
+
+    return RedirectResponse(url=f"/orders/{order.id}", status_code=303)
+
+
+@router.get("/{order_id}/edit", response_class=HTMLResponse)
+def edit_order_form(request: Request, order_id: int, db: Session = Depends(get_db)):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+
+    order = order_service.get_order(db, order_id)
+
+    if order.status != OrderStatus.CONFIRMED:
+        return RedirectResponse(url=f"/orders/{order_id}", status_code=303)
+
+    customers, products = _product_and_customer_choices(db)
+    has_invoice = invoice_service.get_invoice_for_order(db, order_id) is not None
+
+    return templates.TemplateResponse(
+        request=request,
+        name="orders/form.html",
+        context={
+            "settings": settings,
+            "customers": customers,
+            "products": products,
+            "today_date": datetime.now().strftime("%Y-%m-%d"),
+            "default_fulfillment": _default_fulfillment(),
+            "mode": "edit",
+            "form_action": f"/orders/{order_id}/edit",
+            "order": order,
+            "has_invoice": has_invoice,
+        },
+    )
+
+
+@router.post("/{order_id}/edit", response_class=HTMLResponse)
+def update_order(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    delivery_type: str = Form("PICKUP"),
+    fulfillment_date: str = Form(None),
+    delivery_address: str = Form(None),
+    notes: str = Form(None),
+    product_id: list[int] = Form(...),
+    quantity: list[int] = Form(...),
+):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+
+    items = [
+        {"product_id": pid, "quantity": qty} for pid, qty in zip(product_id, quantity, strict=True)
+    ]
+
+    data = {
+        "delivery_type": delivery_type,
+        "fulfillment_date": fulfillment_date or None,
+        "delivery_address": delivery_address or None,
+        "notes": notes or None,
+        "items": items,
+    }
+
+    try:
+        order = order_service.update_order(db, order_id, data)
+    except Exception as exc:
+        db.rollback()
+        # Re-render the edit form with the error
+        order = order_service.get_order(db, order_id)
+        customers, products = _product_and_customer_choices(db)
+        has_invoice = invoice_service.get_invoice_for_order(db, order_id) is not None
+        return templates.TemplateResponse(
+            request=request,
+            name="orders/form.html",
+            context={
+                "settings": settings,
+                "customers": customers,
+                "products": products,
+                "today_date": datetime.now().strftime("%Y-%m-%d"),
+                "default_fulfillment": _default_fulfillment(),
+                "mode": "edit",
+                "form_action": f"/orders/{order_id}/edit",
+                "order": order,
+                "has_invoice": has_invoice,
                 "error": str(exc),
                 "form_data": data,
             },
