@@ -3,12 +3,12 @@ Invoice routes — print receipt, generate PDF, download.
 """
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import FileResponse, RedirectResponse, HTMLResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import invoice_service
 from app.models import Order
+from app.services import invoice_service
 
 router = APIRouter()
 
@@ -59,4 +59,4 @@ def view_invoice(request: Request, order_id: int, db: Session = Depends(get_db))
             "gst_total": gst_total,
             "subtotal": subtotal,
         },
-    )   
+    )

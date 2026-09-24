@@ -1,75 +1,75 @@
 """
 Database engine and session management.
 
-Python/SQLAlchemy concepts:
-- Engine: The connection factory. Creates and manages database connections.
-- Session: A "unit of work." You do all your DB operations through a session,
-  then commit (save) or rollback (discard). Think of it like a transaction.
-- Base: The declarative base class. All your ORM models inherit from this.
-  It's like a "parent class" that gives models their table-mapping magic.
-- get_db(): A FastAPI "dependency." Routes that need a DB session declare
-  `db: Session = Depends(get_db)` and FastAPI handles the lifecycle.
+Key changes vs v0.1:
+- SQLite PRAGMAs enabled on every connection: foreign_keys, WAL,
+  synchronous=NORMAL, busy_timeout=5000.
+- get_db() rolls back on exception before closing the session.
 """
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import get_settings
 
 settings = get_settings()
 
-# For SQLite, we need check_same_thread=False because FastAPI uses
-# a threadpool for sync endpoints. This is safe for our single-user app.
-connect_args = {}
-if settings.db_url.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
+_is_sqlite = settings.db_url.startswith("sqlite")
 
-# The Engine — one per application. It manages a pool of DB connections.
+connect_args = {}
+if _is_sqlite:
+    # FastAPI runs sync endpoints in a threadpool, so connections may
+    # be used on a different thread than they were created on.
+    connect_args["check_same_thread"] = False
+    # Timeout for acquiring a write lock, in seconds.
+    connect_args["timeout"] = 30
+
 engine = create_engine(
     settings.db_url,
     connect_args=connect_args,
-    echo=settings.debug,  # Print SQL queries to console in debug mode
+    echo=settings.debug,
+    future=True,
 )
 
-# SessionLocal — a factory that creates new Session objects.
-# Each request gets its own session (created by get_db below).
+
+@event.listens_for(engine, "connect")
+def _sqlite_pragmas(dbapi_conn, _record):
+    """Enable FK enforcement, WAL, and busy timeout on every SQLite conn."""
+    if not _is_sqlite:
+        return
+    cur = dbapi_conn.cursor()
+    try:
+        cur.execute("PRAGMA foreign_keys=ON")
+        cur.execute("PRAGMA journal_mode=WAL")
+        cur.execute("PRAGMA synchronous=NORMAL")
+        cur.execute("PRAGMA busy_timeout=5000")
+    finally:
+        cur.close()
+
+
 SessionLocal = sessionmaker(
     bind=engine,
-    autocommit=False,  # We control when to commit
-    autoflush=False,   # We control when to flush
-    expire_on_commit=False,  # Objects remain accessible after commit
+    autocommit=False,
+    autoflush=False,
+    expire_on_commit=False,
 )
 
 
 class Base(DeclarativeBase):
-    """
-    Base class for all ORM models.
-
-    Python concept: In SQLAlchemy 2.0, you use DeclarativeBase instead of
-    the old `declarative_base()` function. All your models will do:
-        class Customer(Base):
-            __tablename__ = "customers"
-            ...
-    This registers them with Base.metadata, which Alembic uses for migrations.
-    """
+    """Declarative base for all ORM models."""
     pass
 
 
 def get_db():
     """
-    FastAPI dependency that provides a database session per request.
-
-    Python concept: This is a "generator" (note the `yield`).
-    FastAPI calls this before the route, gives the session to the route,
-    and after the route finishes, the code after `yield` runs (cleanup).
-
-    Usage in a route:
-        @router.get("/customers")
-        def list_customers(db: Session = Depends(get_db)):
-            return db.query(Customer).all()
+    FastAPI dependency. Yields a Session, rolls back on exception,
+    and always closes.
     """
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
-        db.close()   
+        db.close()

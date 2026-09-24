@@ -1,232 +1,136 @@
-# 🧁 House of Desserts — Order Management System
+# House of Desserts
 
-A lightweight, self-hosted order management system for a home bakery.
-Built for speed, simplicity, and zero infrastructure cost.
+A self-hosted order management system for a home bakery.
+
+Built for speed, offline-first operation, and zero infrastructure cost.
+Runs on a laptop or a mini PC on your home network and is reachable
+from anywhere via Tailscale.
 
 ## Features
 
-- **Order Management** — Full lifecycle: Inquiry → Confirmed → In Progress → Ready → Delivered → Paid → Cancelled
-- **Customer Book** — Contact details, multiple addresses (with default), preferences, order history
-- **Product Catalog** — SKU, HSN code, GST rate, pricing, prep time, soft delete
-- **Payment Tracking** — Advances, balance due, multiple payment methods, auto-PAID on full payment
-- **Invoicing** — Thermal receipt (ESC/POS) + PDF (fpdf2) + on-screen preview
-- **Delivery Management** — Pickup/Delivery toggle, address auto-population from customer records
-- **Audit Log** — Append-only record of all changes (create, update, delete, status change, payment)
-- **Monthly Export** — CSV (orders, payments) + JSON (summary) for tax filing
-- **Soft Delete** — Customers, products, and addresses are never hard-deleted
-- **Mobile-Friendly** — Responsive UI, accessible from phone via Tailscale
-- **Zero CDN Dependency** — All CSS/JS self-hosted, works offline
+- **Order lifecycle** — INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID, with CANCELLED as a terminal branch
+- **Customer book** with multiple addresses and search
+- **Product catalog** with SKU, HSN, GST rate, and soft delete
+- **Payment tracking** — partial payments, auto-PAID on full settlement
+- **Invoices** — immutable snapshots with sequential numbering, PDF export, and thermal receipt
+- **Audit trail** — append-only log of every mutation, written in the same transaction as the mutation
+- **Dashboard** — today's orders, pending delivery, outstanding balance, active products
+- **Exports** — monthly CSV/JSON for tax filing
+- **Thermal printer support** — file, USB, or network ESC/POS
 
-## Tech Stack
+## Stack
 
 | Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.12+ + FastAPI |
-| Database | SQLite + SQLAlchemy 2.0 (ORM) |
-| Migrations | Alembic |
-| Frontend | HTMX + daisyUI 4 (pre-compiled Tailwind CSS) |
-| Templating | Jinja2 |
-| PDF Generation | fpdf2 (pure Python, no system deps) |
-| Thermal Printing | python-escpos (ESC/POS protocol) |
-| Config | pydantic-settings (env vars) |
-| Remote Access | Tailscale (free tier, MagicDNS) |
-| Backup | SQLite online backup via Windows Task Scheduler |
+|---|---|
+| Backend | Python 3.12+ / FastAPI |
+| Database | SQLite (WAL) / SQLAlchemy 2.0 |
+| Templates | Jinja2 + HTMX + daisyUI |
+| PDF | fpdf2 (Noto font for ₹) |
+| Printing | python-escpos |
+| Config | pydantic-settings |
 
-## Quick Start
+## Quick start
 
-### Prerequisites
-
-- Python 3.12+
-- (Optional) A thermal receipt printer (80mm or 58mm)
-- (Optional) Tailscale for remote access
-
-### Setup
-
-```bash
-# 1. Clone the repo
-git clone <your-repo-url> house-of-desserts
+```powershell
+git clone https://github.com/puneet-swarup/house-of-desserts.git
 cd house-of-desserts
 
-# 2. Create virtual environment
 python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 
-# 3. Activate it
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/Mac
-
-# 4. Install all dependencies (including dev tools)
 pip install -e ".[dev]"
 
-# 5. Configure environment
-copy .env.example .env        # Windows
-# cp .env.example .env        # Linux/Mac
-# Edit .env with your business details
+Copy-Item .env.example .env
+# Edit .env: set SECRET_KEY, DEBUG=false, optionally GSTIN etc.
 
-# 6. Create required directories
-mkdir data backups
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+# Paste output into SECRET_KEY in .env
 
-# 7. Run database migrations
-alembic upgrade head
-
-# 8. Start the server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload   
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-### Access
-- Local: http://localhost:8000
-- Tailscale (remote): http://houseofdesserts (port 80 via tailscale serve)
-- Phone: Install Tailscale → open http://houseofdesserts in browser
+Open http://127.0.0.1:8000
 
-### Configuration
-All business details are configured via environment variables (.env file):
+## Configuration
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `APP_NAME` | Business name (shown in UI & receipts) | `House of Desserts` |
-| `APP_TAGLINE` | Tagline/subtitle | `Artisan Bakes & Cakes` |
-| `FSSAI_NUMBER` | FSSAI license number | `10012345678901` |
-| `GSTIN` | GSTIN (if registered, leave blank if not) | `27ABCDE1234F1Z5` |
-| `PHONE` | Business phone | `+91 98765 43210` |
-| `ADDRESS` | Business address | `12 Baker's Lane, Mumbai` |
-| `CURRENCY` | Currency symbol | `₹` |
-| `DB_URL` | Database connection string | `sqlite:///data/bakery.db` |
-| `PRINTER_TYPE` | `usb`, `network`, or `file` | `file` |
-| `PRINTER_DEVICE` | USB path or IP:port | `192.168.1.50:9100` |
-| `PRINTER_WIDTH` | Paper width in mm (58 or 80) | `80` |
-| `BACKUP_DIR` | Directory for DB backups | `./backups` |
-| `INVOICE_PREFIX` | Invoice number prefix | `HOD` |
-| `INVOICE_START_NUMBER` | Starting sequence number | `1` |
+All configuration lives in `.env`. See `.env.example` for the full list.
 
-### Project Structure
+| Variable | Purpose |
+|---|---|
+| `APP_NAME`, `APP_TAGLINE` | Shown on invoices and the UI |
+| `GSTIN`, `FSSAI_NUMBER` | Printed on invoices if set |
+| `SECRET_KEY` | Session signing. **Required** — generate a real one |
+| `DEBUG` | `true` in dev, `false` in prod. `true` logs every SQL query |
+| `BUSINESS_TIMEZONE` | Used for "today" and report boundaries, default `Asia/Kolkata` |
+| `BIND_HOST`, `BIND_PORT` | Where uvicorn listens |
+| `PRINTER_TYPE` | `file`, `usb`, or `network` |
+| `BACKUP_DIR` | Where SQLite backups are written |
 
-```
-house-of-desserts/
-├── app/
-│   ├── main.py              # FastAPI app factory & router registration
-│   ├── config.py            # Settings (loaded from .env via pydantic-settings)
-│   ├── database.py          # SQLAlchemy engine, session, Base
-│   ├── models/              # ORM models (one file per entity)
-│   │   ├── customer.py      # Customer (soft delete: is_active)
-│   │   ├── address.py       # Address (one-to-many with Customer, soft delete)
-│   │   ├── product.py       # Product (SKU, HSN, GST rate, soft delete)
-│   │   ├── order.py         # Order + OrderItem + OrderStatus enum
-│   │   ├── payment.py       # Payment records
-│   │   ├── invoice.py       # Invoice records
-│   │   └── audit_log.py     # Append-only audit trail
-│   ├── schemas/             # Pydantic request/response schemas
-│   ├── routers/             # HTTP route handlers
-│   │   ├── dashboard.py     # Stats + recent orders
-│   │   ├── products.py      # Product CRUD
-│   │   ├── customers.py     # Customer CRUD + address management + search
-│   │   ├── orders.py        # Order CRUD + status + payments
-│   │   ├── invoices.py      # PDF, thermal print, preview
-│   │   ├── export.py        # CSV/JSON downloads
-│   │   ├── audit.py         # Audit log viewer
-│   │   └── settings.py      # Business config display
-│   ├── services/            # Business logic
-│   │   ├── product_service.py
-│   │   ├── customer_service.py
-│   │   ├── order_service.py
-│   │   ├── invoice_service.py
-│   │   ├── export_service.py
-│   │   └── audit_service.py
-│   ├── templates/           # Jinja2 + HTMX + daisyUI HTML
-│   ├── static/
-│   │   ├── css/app.css      # Pre-compiled Tailwind + daisyUI
-│   │   ├── js/htmx.min.js   # Self-hosted HTMX
-│   │   └── images/logo.png
-│   └── utils/
-│       └── escpos_printer.py  # Thermal printer wrapper
-├── alembic/                 # Database migrations
-├── tests/                   # Pytest test suite (40+ tests)
-├── docs/
-│   └── adr/                 # Architecture Decision Records
-├── data/                    # SQLite DB + generated PDFs (gitignored)
-├── backups/                 # DB backup files (gitignored)
-├── backup.py                # Nightly backup script
-├── backup.bat               # Windows Task Scheduler wrapper
-├── .env.example             # Template for environment config
-├── pyproject.toml           # Project metadata & dependencies
-└── Makefile                 # Common commands   
+## Data model
+
+- **Customer** — soft delete via `is_active`, partial unique index on phone
+- **Address** — multiple per customer, one default
+- **Product** — soft delete, partial unique index on SKU
+- **Order** — human-readable `HOD-YYYY-NNNN` number from a sequence table
+- **OrderItem** — frozen unit price, GST rate, GST amount, line total (all `Numeric`)
+- **Payment** — one row per transaction, `received_at` explicit
+- **Invoice** — immutable snapshot: business identity, billed-to, line items as JSON, and all totals as of issue time
+- **NumberSequence** — monotonic counter per prefix; guarantees gapless numbering
+- **AuditLog** — append-only; written in the same transaction as the mutation it describes
+
+## Development
+
+```powershell
+# Run unit tests (fast, no browser)
+pytest
+
+# Run UI tests (requires running app)
+pytest tests/ui -v
 ```
 
-### Development
+### Project layout
+
 ```
-# Run tests
-pytest -v
+app/
+  config.py              Typed settings from .env
+  database.py            Engine, session, PRAGMAs, get_db dependency
+  main.py                App factory, routers, filters
+  models/                SQLAlchemy 2.0 declarative models
+  schemas/               Pydantic request/response models
+  routers/               HTTP endpoints
+  services/              Business logic — called by routers
+  utils/
+    money.py             Decimal helpers
+    time.py              Naive-UTC storage + business-tz display
+    escpos_printer.py    Thermal printer
+  templates/             Jinja2 + HTMX + daisyUI
+  static/                Pre-built Tailwind, fonts, favicon
 
-# Run with hot reload (development)
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Create a new migration
-alembic revision --autogenerate -m "description"
-
-# Apply migrations
-alembic upgrade head
-
-# Rebuild CSS (after adding new Tailwind classes in templates)
-cd app\static\css
-tailwindcss.exe -i input.css -o app.css --minify
-
-# Watch mode for CSS (during development)
-tailwindcss.exe -i input.css -o app.css --minify --watch   
-```
-
-## Deployment
-### Tailscale Remote Access
-```
-# Install Tailscale on your PC + phone, sign in with same account
-# Rename machine to "houseofdesserts" in Tailscale admin
-# Enable MagicDNS in Tailscale admin
-
-# Serve on port 80 (proxies to your app on 8000)
-tailscale serve --bg 80   
+tests/
+  conftest.py            Fixtures (in-memory SQLite with FK ON)
+  test_money.py          Decimal rounding, GST split
+  test_numbering.py      Sequential, gapless
+  test_status_machine.py Legal/illegal transitions
+  test_invoice_snapshot.py  Invoice is immutable
+  test_soft_delete.py    Delete → recreate works
+  test_fk_enforcement.py Proves PRAGMA is on
+  ui/                    Playwright tests
 ```
 
-### Nightly Backup
-```
-# Manual backup
-backup.bat
+## Key design decisions
 
-# Scheduled: Windows Task Scheduler → Daily at 2 AM
-# Program: backup.bat
-# Start in: project root   
-```
+- **Money is `Decimal`, never `Float`.** Columns are `Numeric(12,2)`. Every calculation goes through `app.utils.money.money()`. Rounding is per-line, half-up, and documented in `money.py`.
+- **Invoices are immutable.** At issue time we snapshot business identity, billed-to, line items, and totals into the invoice row. Editing the order afterwards does not change the invoice.
+- **Order and invoice numbers come from a sequence table**, not a count. Gapless, concurrency-safe, unique-constrained.
+- **Audit writes commit with the mutation.** `log_action` never commits on its own. A failed audit write rolls back the whole transaction.
+- **Foreign keys are enforced** via `PRAGMA foreign_keys=ON` on every connection. Cascade deletes work.
+- **WAL + busy_timeout** so backups and app writes don't deadlock.
+- **Naive UTC storage, business-tz display.** See `app/utils/time.py`.
 
-```html
-Keeps last 7 backups. Log at backups/backup.log.
-```
+## Operations
 
-## Backup & Recovery
-```html
-# Manual backup
-sqlite3 data/bakery.db ".backup 'backups/bakery_$(date +%Y%m%d).db'"
-
-# Restore
-sqlite3 data/bakery.db ".restore 'backups/bakery_20260922.db'"   
-```
-
-## Roadmap
-- [x] Core CRUD (Products, Customers, Orders)
-- [x] Multi-address per customer with default
-- [x] Customer typeahead search
-- [x] Delivery/Pickup toggle with address auto-population
-- [x] Payment tracking + auto-PAID
-- [x] Thermal receipt printing (ESC/POS)
-- [x] PDF invoice generation (fpdf2)
-- [x] Invoice preview (on-screen)
-- [x] CSV/JSON export for tax filing
-- [x] Audit log (auto + viewer)
-- [x] Soft delete (customers, products, addresses)
-- [x] Responsive mobile UI
-- [x] Tailscale remote access
-- [x] Nightly backup automation
-- [x] Test suite (40+ tests)
-- [ ] (Phase 2) WhatsApp webhook integration
-- [ ] (Phase 2) Order editing (INQUIRY/CONFIRMED states)
-- [ ] (Phase 2) Product search in order form (50+ products)
-- [ ] (Phase 3) Recipe/ingredient costing
-- [ ] (Phase 3) Customer-facing portal
+See [docs/OPERATIONS.md](docs/OPERATIONS.md) for backup, restore, deploy, and troubleshooting.
 
 ## License
-Private — All rights reserved.
+
+Private — not for redistribution.

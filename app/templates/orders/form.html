@@ -2,302 +2,211 @@
 {% block title %}New Order — {{ settings.app_name }}{% endblock %}
 
 {% block content %}
-<div class="max-w-3xl mx-auto space-y-4">
+<div class="container mx-auto p-4 max-w-3xl">
 
-    <div class="flex justify-between items-center">
-        <h1 class="text-2xl font-extrabold text-amber-900">New Order</h1>
-        <a href="/orders" class="btn btn-ghost btn-sm">← Back</a>
+  <div class="flex items-center justify-between mb-4">
+    <h1 class="text-2xl font-bold">New Order</h1>
+    <a href="/orders" class="btn btn-ghost btn-sm">Back</a>
+  </div>
+
+  {% if error %}
+    <div class="alert alert-error mb-4"><span>{{ error }}</span></div>
+  {% endif %}
+
+  <form method="post" action="/orders/" id="order-form" class="space-y-4">
+
+    {# ---------- Customer ---------- #}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">Customer</h2>
+        <select name="customer_id" id="customer_id" class="select select-bordered w-full" required>
+          <option value="">Select a customer…</option>
+          {% for c in customers %}
+            <option value="{{ c.id }}"
+                    data-default-address="{{ c.default_address_line }}"
+                    data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
+                    {% if form_data and form_data.customer_id == c.id %}selected{% endif %}>
+              {{ c.name }} — {{ c.phone }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
-    {% if error %}
-    <div class="alert alert-error text-sm py-3"><span>{{ error }}</span></div>
-    {% endif %}
+    {# ---------- Delivery ---------- #}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">Delivery</h2>
 
-    <form method="post" action="/orders" class="space-y-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label class="block">
+            <span class="label-text">Type</span>
+            <select name="delivery_type" id="delivery_type" class="select select-bordered w-full">
+              <option value="DELIVERY" selected>Delivery</option>
+              <option value="PICKUP">Pickup</option>
+            </select>
+          </label>
 
-        <!-- Customer & Delivery -->
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body space-y-4">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer & Delivery</h2>
+          <label class="block">
+            <span class="label-text">Order date</span>
+            <input type="date" name="order_date" class="input input-bordered w-full"
+                   value="{{ form_data.order_date if form_data and form_data.order_date else today_date }}">
+          </label>
 
-                <!-- Customer Search -->
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-semibold">Customer *</span></label>
-                    <input type="hidden" name="customer_id" id="customer_id" required />
-                    <div class="relative">
-                        <input type="text" name="q" id="customer-search"
-                               class="input input-bordered w-full"
-                               placeholder="Search by name or phone..."
-                               autocomplete="off"
-                               hx-get="/customers/search"
-                               hx-trigger="keyup delay:300ms"
-                               hx-target="#customer-results"
-                               hx-swap="innerHTML" />
-                        <div id="customer-selected" class="hidden mt-1">
-                            <span class="badge badge-amber badge-sm font-semibold" id="customer-selected-label"></span>
-                            <button type="button" class="btn btn-ghost btn-xs ml-1" onclick="clearCustomer()">✕</button>
-                        </div>
-                        <div id="customer-results"
-                             class="absolute z-50 left-0 right-0 mt-1 bg-base-100 border border-base-300
-                                    rounded-lg shadow-lg max-h-64 overflow-y-auto hidden"></div>
-                    </div>
-                </div>
+          <label class="block">
+            <span class="label-text">Delivery date</span>
+            <input type="date" name="delivery_date" class="input input-bordered w-full">
+          </label>
+        </div>
 
-                <!-- Delivery Type + Date + Address -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="form-control">
-                        <label class="label"><span class="label-text font-semibold">Delivery Type</span></label>
-                        <select name="delivery_type" id="delivery-type" class="select select-bordered w-full">
-                            <option value="PICKUP">Pickup</option>
-                            <option value="DELIVERY">Delivery</option>
-                        </select>
-                    </div>
+        <label class="block mt-3" id="delivery_address_wrap">
+          <span class="label-text">Delivery address</span>
+          <textarea name="delivery_address" id="delivery_address"
+                    class="textarea textarea-bordered w-full" rows="3"
+                    placeholder="Auto-filled from customer's default address when Delivery is selected"></textarea>
+        </label>
+      </div>
+    </div>
 
+    {# ---------- Items ---------- #}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">Items</h2>
 
-                    <!-- Address Select (appears after customer selected) -->
-                    <div class="form-control" id="address-section">
-                        <label class="label"><span class="label-text font-semibold">Delivery Address</span></label>
-                        <select id="address-select" class="select select-bordered w-full mb-2 hidden"
-                                onchange="document.querySelector('input[name=&quot;delivery_address&quot;]').value = this.value;">
-                        </select>
-                        <input type="text" name="delivery_address" id="delivery-address-input"
-                               class="input input-bordered w-full"
-                               placeholder="Will appear when Delivery type is selected" disabled />
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div class="form-control">
-                        <label class="label"><span class="label-text font-semibold">Order Date</span></label>
-                        <input type="date" name="order_date" class="input input-bordered w-full"
-                               value="{{ today_date }}" />
-                    </div>
-                    <div class="form-control">
-                        <label class="label"><span class="label-text font-semibold">Delivery Date</span></label>
-                        <input type="date" name="delivery_date" class="input input-bordered w-full" />
-                    </div>
-                </div>
-
-                <div class="form-control">
-                    <label class="label"><span class="label-text font-semibold">Notes</span></label>
-                    <textarea name="notes" rows="2" class="textarea textarea-bordered w-full"
-                              placeholder="Special instructions, cake message, etc."></textarea>
-                </div>
+        <div id="items" class="space-y-2">
+          <div class="grid grid-cols-12 gap-2 items-end item-row">
+            <label class="col-span-7 block">
+              <span class="label-text">Product</span>
+              <select name="product_id" class="select select-bordered select-sm w-full" required>
+                <option value="">Select…</option>
+                {% for p in products %}
+                  <option value="{{ p.id }}">
+                    {{ p.name }} — {{ p.base_price|money }}
+                  </option>
+                {% endfor %}
+              </select>
+            </label>
+            <label class="col-span-3 block">
+              <span class="label-text">Qty</span>
+              <input type="number" min="1" value="1" name="quantity"
+                     class="input input-bordered input-sm w-full" required>
+            </label>
+            <div class="col-span-2">
+              <button type="button" class="btn btn-ghost btn-sm w-full"
+                      onclick="this.closest('.item-row').remove()">Remove</button>
             </div>
+          </div>
         </div>
 
-        <!-- Order Items -->
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>
-                    <button type="button" onclick="addRow()" class="btn btn-outline btn-sm btn-amber gap-1 font-semibold">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                        </svg>
-                        Add Item
-                    </button>
-                </div>
+        <div class="mt-2">
+          <button type="button" class="btn btn-sm btn-outline" onclick="addItemRow()">+ Add item</button>
+        </div>
+      </div>
+    </div>
 
-                <div id="items-container" class="space-y-3 mt-2"></div>
+    {# ---------- Advance ---------- #}
+    <div class="card bg-base-100 shadow">
+      <div class="card-body">
+        <h2 class="card-title text-base">Advance</h2>
 
-                <template id="item-row-template">
-                    <div class="flex gap-2 items-end item-row">
-                        <div class="form-control flex-1">
-                            <select name="product_id" class="select select-bordered select-sm w-full" required>
-                                <option value="" disabled selected>Product...</option>
-                                {% for p in products %}
-                                <option value="{{ p.id }}">{{ p.name }} ({{ settings.currency }}{{ "{:,.0f}".format(p.base_price) }})</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-control w-20">
-                            <input type="number" name="quantity" value="1" min="1"
-                                   class="input input-bordered input-sm w-full" />
-                        </div>
-                        <button type="button" class="btn btn-ghost btn-sm btn-circle text-error hover:bg-error/10"
-                                onclick="this.closest('.item-row').remove()">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
-                            </svg>
-                        </button>
-                    </div>
-                </template>
-
-                {% if not products %}
-                <p class="text-sm text-warning mt-2">
-                    ⚠️ No products in catalog. <a href="/products/new" class="link">Add products first</a>.
-                </p>
-                {% endif %}
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label class="block">
+            <span class="label-text">Advance amount</span>
+            <input type="number" step="0.01" min="0" value="0"
+                   name="advance_paid" class="input input-bordered w-full">
+          </label>
+          <label class="block">
+            <span class="label-text">Payment method</span>
+            <select name="advance_method" class="select select-bordered w-full">
+              <option value="CASH">Cash</option>
+              <option value="UPI">UPI</option>
+              <option value="BANK">Bank</option>
+              <option value="CARD">Card</option>
+            </select>
+          </label>
         </div>
 
-        <!-- Advance Payment -->
-        <div class="card bg-base-100 shadow-sm">
-            <div class="card-body">
-                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Advance Payment</h2>
-                <div class="grid grid-cols-2 gap-4 mt-2">
-                    <div class="form-control">
-                        <label class="label"><span class="label-text font-semibold">Amount Received</span></label>
-                        <input type="number" name="advance_paid" value="0" step="0.01" min="0"
-                               class="input input-bordered w-full" />
-                    </div>
-                    <div class="form-control">
-                        <label class="label"><span class="label-text font-semibold">Method</span></label>
-                        <select name="advance_method" class="select select-bordered w-full">
-                            <option value="UPI">UPI</option>
-                            <option value="CASH">Cash</option>
-                            <option value="BANK">Bank Transfer</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <label class="block mt-3">
+          <span class="label-text">Notes</span>
+          <textarea name="notes" rows="2" class="textarea textarea-bordered w-full"></textarea>
+        </label>
+      </div>
+    </div>
 
-        <!-- Submit -->
-        <div class="flex gap-3">
-            <button type="submit" class="btn btn-primary btn-md gap-2 font-bold shadow-md hover:shadow-lg">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
-                </svg>
-                Create Order
-            </button>
-            <a href="/orders" class="btn btn-ghost btn-md font-semibold text-base-content/60">Cancel</a>
-        </div>
-
-    </form>
+    <div class="flex justify-end gap-2">
+      <a href="/orders" class="btn btn-ghost">Cancel</a>
+      <button class="btn btn-primary" type="submit">Create Order</button>
+    </div>
+  </form>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-// ============ ITEM ROWS ============
-function addRow() {
-    const template = document.getElementById('item-row-template');
-    const clone = template.content.cloneNode(true);
-    document.getElementById('items-container').appendChild(clone);
-}
-addRow();
-
-// ============ CUSTOMER SEARCH ============
-let selectedCustomerId = null;
-let customerAddresses = [];
-
-// Event delegation: fires when any .customer-result row is clicked
-document.getElementById('customer-results').addEventListener('click', function(e) {
-    const item = e.target.closest('.customer-result');
-    if (!item) return;
-
-    const id = item.dataset.id;
-    const name = item.dataset.name;
-    const phone = item.dataset.phone;
-
-    const ids = JSON.parse(item.dataset.addrIds || '[]');
-    const labels = JSON.parse(item.dataset.addrLabels || '[]');
-    const lines = JSON.parse(item.dataset.addrLines || '[]');
-    const defaults = JSON.parse(item.dataset.addrDefaults || '[]');
-    const addresses = ids.map((id, i) => ({
-        id: id,
-        label: labels[i],
-        line: lines[i],
-        is_default: defaults[i]
-    }));
-
-    selectCustomer(id, name, phone, addresses);
-});
-
-function selectCustomer(id, name, phone, addresses) {
-    selectedCustomerId = id;
-    customerAddresses = addresses;
-
-    document.getElementById('customer_id').value = id;
-    document.getElementById('customer-search').value = name + ' (' + phone + ')';
-    document.getElementById('customer-selected').classList.remove('hidden');
-    document.getElementById('customer-selected-label').textContent = name + ' · ' + phone;
-    document.getElementById('customer-results').classList.add('hidden');
-
-    populateAddressDropdown();
+// --- Add item row ---
+function addItemRow() {
+  const container = document.getElementById('items');
+  const template = container.querySelector('.item-row');
+  const clone = template.cloneNode(true);
+  clone.querySelector('select[name="product_id"]').value = '';
+  clone.querySelector('input[name="quantity"]').value = 1;
+  container.appendChild(clone);
 }
 
-function clearCustomer() {
-    selectedCustomerId = null;
-    customerAddresses = [];
-    document.getElementById('customer_id').value = '';
-    document.getElementById('customer-search').value = '';
-    document.getElementById('customer-selected').classList.add('hidden');
-    document.getElementById('address-select').classList.add('hidden');
-    document.getElementById('address-select').innerHTML = '';
-    document.getElementById('delivery-address-input').value = '';
-    toggleDeliveryAddress();
-}
+// --- Auto-fill delivery address from selected customer's default address ---
+(function () {
+  const customerSelect = document.getElementById('customer_id');
+  const deliveryType = document.getElementById('delivery_type');
+  const addressField = document.getElementById('delivery_address');
+  const addressWrap = document.getElementById('delivery_address_wrap');
 
-function populateAddressDropdown() {
-    const addrSelect = document.getElementById('address-select');
-    const addrInput = document.getElementById('delivery-address-input');
+  function selectedCustomer() {
+    const opt = customerSelect.selectedOptions[0];
+    if (!opt || !opt.value) return null;
+    return {
+      defaultAddress: opt.dataset.defaultAddress || '',
+      suggestedType: opt.dataset.deliveryType || 'DELIVERY',
+    };
+  }
 
-    if (customerAddresses.length > 0) {
-        addrSelect.innerHTML = '<option value="" disabled selected>Select saved address...</option>';
-        customerAddresses.forEach(a => {
-            const opt = document.createElement('option');
-            opt.value = a.line;
-            opt.textContent = a.label + (a.is_default ? ' (Default)' : '');
-            addrSelect.appendChild(opt);
-        });
-    } else {
-        addrSelect.innerHTML = '';
+  function syncAddressFromCustomer({ onlyIfDelivery = true } = {}) {
+    const c = selectedCustomer();
+    if (!c) return;
+    if (onlyIfDelivery && deliveryType.value !== 'DELIVERY') return;
+    if (!c.defaultAddress) return;
+    // Only overwrite if the field is empty or was auto-filled previously.
+    const isUntouched = !addressField.dataset.autofilled || addressField.value === addressField.dataset.autofilled;
+    if (isUntouched) {
+      addressField.value = c.defaultAddress;
+      addressField.dataset.autofilled = c.defaultAddress;
     }
+  }
 
-    toggleDeliveryAddress();
-}
+  function syncAddressVisibility() {
+    addressWrap.style.display = (deliveryType.value === 'DELIVERY') ? '' : 'none';
+  }
 
-// ============ DELIVERY TYPE TOGGLE ============
-function toggleDeliveryAddress() {
-    const deliveryType = document.getElementById('delivery-type').value;
-    const addrInput = document.getElementById('delivery-address-input');
-    const addrSelect = document.getElementById('address-select');
-    const isPickup = (deliveryType === 'PICKUP');
-
-    addrInput.disabled = isPickup;
-    addrInput.classList.toggle('opacity-50', isPickup);
-
-    if (isPickup) {
-        addrInput.value = '';
-        addrSelect.classList.add('hidden');
-        addrSelect.disabled = true;
-    } else {
-        addrSelect.disabled = false;
-        if (customerAddresses.length > 0) {
-            addrSelect.classList.remove('hidden');
-            const defaultAddr = customerAddresses.find(a => a.is_default);
-            if (defaultAddr) {
-                addrSelect.value = defaultAddr.line;
-                addrInput.value = defaultAddr.line;
-            }
-        }
+  customerSelect.addEventListener('change', () => {
+    const c = selectedCustomer();
+    if (c) {
+      // Default delivery type based on whether customer has an address.
+      deliveryType.value = c.suggestedType;
     }
-}
+    syncAddressVisibility();
+    syncAddressFromCustomer({ onlyIfDelivery: false });
+  });
 
-document.getElementById('delivery-type').addEventListener('change', toggleDeliveryAddress);
-toggleDeliveryAddress();
-
-// ============ HTMX EVENT HANDLERS ============
-document.addEventListener('click', function(e) {
-    const results = document.getElementById('customer-results');
-    const search = document.getElementById('customer-search');
-    if (results && !results.contains(e.target) && e.target !== search) {
-        results.classList.add('hidden');
+  deliveryType.addEventListener('change', () => {
+    syncAddressVisibility();
+    if (deliveryType.value === 'DELIVERY') {
+      syncAddressFromCustomer();
     }
-});
+  });
 
-document.body.addEventListener('htmx:afterSwap', function(e) {
-    if (e.target.id === 'customer-results') {
-        const results = document.getElementById('customer-results');
-        if (results && results.innerHTML.trim().length > 0) {
-            results.classList.remove('hidden');
-        } else if (results) {
-            results.classList.add('hidden');
-        }
-    }
-});
+  // On page load: honour server-side form_data if present, else default to Delivery.
+  if (!customerSelect.value) {
+    deliveryType.value = 'DELIVERY';
+  }
+  syncAddressVisibility();
+  syncAddressFromCustomer({ onlyIfDelivery: false });
+})();
 </script>
 {% endblock %}

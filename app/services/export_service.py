@@ -1,54 +1,56 @@
 """
-Export service — generates CSV/JSON files for tax filing and record-keeping.
+Export service — CSV/JSON for tax filing.
 
-Python concept: This service queries the DB for a date range and writes
-a structured file. The user downloads it from the browser.
+All amounts come from stored Decimal columns. No recomputation of
+GST from rates; we trust what was written at order time.
 """
+
+from __future__ import annotations
 
 import csv
 import io
 import json
 from datetime import datetime
-from typing import Generator
+from decimal import Decimal
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
-from app.models import Order, OrderItem, Payment, OrderStatus
+from app.models import Order, OrderStatus
+from app.utils.money import money
+from app.utils.time import business_day_bounds_utc
+
+
+def _bounds(start_date: str, end_date: str) -> tuple[datetime, datetime]:
+    start, _ = business_day_bounds_utc(start_date)
+    _, end = business_day_bounds_utc(end_date)
+    return start, end
 
 
 def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    """
-    Export orders in a date range to CSV.
-    Returns (filename, csv_content).
-
-    start_date / end_date: "YYYY-MM-DD" format strings.
-    """
-    start = datetime.fromisoformat(start_date)
-    end = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+    start, end = _bounds(start_date, end_date)
 
     orders = db.execute(
         select(Order)
+        .options(selectinload(Order.items), selectinload(Order.customer))
         .where(Order.order_date >= start, Order.order_date <= end)
         .where(Order.status != OrderStatus.CANCELLED)
         .order_by(Order.order_date)
     ).scalars().all()
 
-    # Build CSV
     output = io.StringIO()
     writer = csv.writer(output)
-
-    # Header
     writer.writerow([
         "Order Number", "Date", "Customer", "Phone", "Status",
-        "Delivery Type", "Total Amount", "GST Amount", "Advance Paid",
-        "Balance Due", "Items"
+        "Delivery Type", "Subtotal", "GST Amount", "Total",
+        "Advance Paid", "Balance Due", "Items",
     ])
 
     for order in orders:
-        gst_total = sum(item.gst_amount for item in order.items)
+        gst_total = sum((money(i.gst_amount) for i in order.items), Decimal("0.00"))
+        subtotal = money(order.total_amount - gst_total)
         items_str = "; ".join(
-            f"{item.product.name} x{item.quantity}" for item in order.items
+            f"{i.product.name} x{i.quantity}" for i in order.items
         )
         writer.writerow([
             order.order_number,
@@ -57,24 +59,23 @@ def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str,
             order.customer.phone,
             order.status.value,
             order.delivery_type,
-            f"{order.total_amount:.2f}",
+            f"{subtotal:.2f}",
             f"{gst_total:.2f}",
-            f"{order.advance_paid:.2f}",
-            f"{order.balance_due:.2f}",
+            f"{money(order.total_amount):.2f}",
+            f"{money(order.advance_paid):.2f}",
+            f"{money(order.balance_due):.2f}",
             items_str,
         ])
 
-    filename = f"orders_{start_date}_to_{end_date}.csv"
-    return filename, output.getvalue()
+    return f"orders_{start_date}_to_{end_date}.csv", output.getvalue()
 
 
 def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    """Export all payments in a date range to CSV."""
-    start = datetime.fromisoformat(start_date)
-    end = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+    start, end = _bounds(start_date, end_date)
 
     orders = db.execute(
         select(Order)
+        .options(selectinload(Order.payments), selectinload(Order.customer))
         .where(Order.order_date >= start, Order.order_date <= end)
         .order_by(Order.order_date)
     ).scalars().all()
@@ -83,70 +84,65 @@ def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[st
     writer = csv.writer(output)
     writer.writerow([
         "Order Number", "Customer", "Payment Date", "Amount",
-        "Method", "Reference", "Running Balance After"
+        "Method", "Reference", "Running Total Paid",
     ])
 
     for order in orders:
-        running = 0.0
+        running = Decimal("0.00")
         for p in order.payments:
             if start <= p.received_at <= end:
-                running += p.amount
+                running += money(p.amount)
                 writer.writerow([
                     order.order_number,
                     order.customer.name,
                     p.received_at.strftime("%Y-%m-%d %H:%M"),
-                    f"{p.amount:.2f}",
+                    f"{money(p.amount):.2f}",
                     p.method,
                     p.reference or "",
-                    f"{order.total_amount - running:.2f}",
+                    f"{running:.2f}",
                 ])
 
-    filename = f"payments_{start_date}_to_{end_date}.csv"
-    return filename, output.getvalue()
+    return f"payments_{start_date}_to_{end_date}.csv", output.getvalue()
 
 
 def export_summary_json(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
-    """Export a monthly summary as JSON (useful for ITR / CA)."""
-    start = datetime.fromisoformat(start_date)
-    end = datetime.fromisoformat(end_date).replace(hour=23, minute=59, second=59)
+    start, end = _bounds(start_date, end_date)
 
     orders = db.execute(
         select(Order)
+        .options(selectinload(Order.items))
         .where(Order.order_date >= start, Order.order_date <= end)
         .where(Order.status != OrderStatus.CANCELLED)
     ).scalars().all()
 
-    total_revenue = sum(o.total_amount for o in orders)
-    total_gst = sum(sum(i.gst_amount for i in o.items) for o in orders)
-    total_collected = sum(o.advance_paid for o in orders)
-    total_outstanding = sum(o.balance_due for o in orders)
-    order_count = len(orders)
+    total_revenue = sum((money(o.total_amount) for o in orders), Decimal("0.00"))
+    total_gst = sum(
+        (sum((money(i.gst_amount) for i in o.items), Decimal("0.00")) for o in orders),
+        Decimal("0.00"),
+    )
+    total_collected = sum((money(o.advance_paid) for o in orders), Decimal("0.00"))
+    total_outstanding = sum((money(o.balance_due) for o in orders), Decimal("0.00"))
 
-    # Breakdown by status
-    by_status = {}
+    by_status: dict[str, int] = {}
     for o in orders:
-        s = o.status.value
-        by_status[s] = by_status.get(s, 0) + 1
+        by_status[o.status.value] = by_status.get(o.status.value, 0) + 1
 
-    # Top products
-    product_sales = {}
+    product_sales: dict[str, Decimal] = {}
     for o in orders:
         for item in o.items:
             name = item.product.name
-            product_sales[name] = product_sales.get(name, 0) + item.line_total
+            product_sales[name] = product_sales.get(name, Decimal("0.00")) + money(item.line_total)
 
-    top_products = sorted(product_sales.items(), key=lambda x: x[1], reverse=True)[:10]
+    top = sorted(product_sales.items(), key=lambda kv: kv[1], reverse=True)[:10]
 
     summary = {
         "period": {"start": start_date, "end": end_date},
-        "total_orders": order_count,
-        "total_revenue": round(total_revenue, 2),
-        "total_gst_collected": round(total_gst, 2),
-        "total_amounts_collected": round(total_collected, 2),
-        "total_outstanding": round(total_outstanding, 2),
+        "total_orders": len(orders),
+        "total_revenue": str(money(total_revenue)),
+        "total_gst_collected": str(money(total_gst)),
+        "total_amounts_collected": str(money(total_collected)),
+        "total_outstanding": str(money(total_outstanding)),
         "orders_by_status": by_status,
-        "top_products": [{"name": n, "revenue": round(r, 2)} for n, r in top_products],
+        "top_products": [{"name": n, "revenue": str(money(r))} for n, r in top],
     }
-
-    filename = f"summary_{start_date}_to_{end_date}.json"
-    return filename, json.dumps(summary, indent=2)   
+    return f"summary_{start_date}_to_{end_date}.json", json.dumps(summary, indent=2)

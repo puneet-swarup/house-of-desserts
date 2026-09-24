@@ -86,8 +86,7 @@
                     <tr class="text-xs uppercase text-base-content/50">
                         <th>#</th>
                         <th>Item</th>
-                        <th>HSN</th>
-                        <th class="text-right">Qty</th>
+<th class="text-right">Qty</th>
                         <th class="text-right">Rate</th>
                         <th class="text-right">GST</th>
                         <th class="text-right">Amount</th>
@@ -103,8 +102,7 @@
                             <br><span class="text-xs text-base-content/50">{{ item.customization_notes }}</span>
                             {% endif %}
                         </td>
-                        <td class="text-sm font-mono">{{ item.product.hsn_code }}</td>
-                        <td class="text-right text-sm">{{ item.quantity }}</td>
+<td class="text-right text-sm">{{ item.quantity }}</td>
                         <td class="text-right text-sm">{{ settings.currency }}{{ "{:,.2f}".format(item.unit_price) }}</td>
                         <td class="text-right text-sm">{{ settings.currency }}{{ "{:,.2f}".format(item.gst_amount) }}</td>
                         <td class="text-right text-sm font-semibold">{{ settings.currency }}{{ "{:,.2f}".format(item.line_total) }}</td>

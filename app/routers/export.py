@@ -2,8 +2,8 @@
 Export routes — CSV/JSON downloads for tax filing.
 """
 
-from fastapi import APIRouter, Depends, Request, Query
-from fastapi.responses import PlainTextResponse, HTMLResponse
+from fastapi import APIRouter, Depends, Query, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,7 +12,7 @@ from app.services import export_service
 router = APIRouter()
 
 
-@router.get("/export", response_class=HTMLResponse)
+@router.get("", response_class=HTMLResponse)
 def export_page(request: Request):
     """Show the export form (date range picker + format selection)."""
     templates = request.app.state.templates
@@ -24,7 +24,7 @@ def export_page(request: Request):
     )
 
 
-@router.get("/export/orders.csv")
+@router.get("/orders.csv")
 def export_orders(
     start: str = Query(..., description="Start date YYYY-MM-DD"),
     end: str = Query(..., description="End date YYYY-MM-DD"),
@@ -38,7 +38,7 @@ def export_orders(
     )
 
 
-@router.get("/export/payments.csv")
+@router.get("/payments.csv")
 def export_payments(
     start: str = Query(...),
     end: str = Query(...),
@@ -52,7 +52,7 @@ def export_payments(
     )
 
 
-@router.get("/export/summary.json")
+@router.get("/summary.json")
 def export_summary(
     start: str = Query(...),
     end: str = Query(...),

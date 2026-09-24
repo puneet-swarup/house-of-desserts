@@ -1,31 +1,25 @@
 """
 Application configuration.
 
-All settings are loaded from the .env file via pydantic-settings.
+All settings are loaded from .env via pydantic-settings.
 This is the SINGLE SOURCE OF TRUTH for all configurable values.
 
-Python concept: "pydantic-settings" is a library that reads environment
-variables and maps them to typed Python attributes. If a variable is missing
-and has no default, it raises an error at startup (fail-fast).
+fail-fast: required fields (no default) raise at startup if missing.
 """
 
+import secrets
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """
-    Typed configuration object.
-
-    Each attribute maps to an environment variable (case-insensitive).
-    e.g., app_name reads from APP_NAME in .env
-    """
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",  # Ignore unknown env vars (OS sets many)
+        extra="ignore",
+        case_sensitive=False,
     )
 
     # --- Business Identity ---
@@ -39,31 +33,45 @@ class Settings(BaseSettings):
     currency: str = "₹"
 
     # --- Application ---
-    debug: bool = True
-    secret_key: str = "dev-only-change-in-production"
+    debug: bool = False
+    secret_key: str = ""
     db_url: str = "sqlite:///data/bakery.db"
+    business_timezone: str = "Asia/Kolkata"
+
+    # --- Server ---
+    bind_host: str = "127.0.0.1"
+    bind_port: int = 8000
 
     # --- Printer ---
     printer_type: str = "file"  # "usb" | "network" | "file"
     printer_device: str = ""
-    printer_width: int = 80  # 58 or 80 mm
+    printer_width: int = 80
 
     # --- Backup ---
     backup_dir: str = "./backups"
+    backup_schedule: str = "daily"
 
     # --- Invoice Numbering ---
     invoice_prefix: str = "HOD"
     invoice_start_number: int = 1
 
+    @field_validator("secret_key")
+    @classmethod
+    def _ensure_secret(cls, v: str, info):
+        # If not set, generate one for dev. Warn in non-debug.
+        if v:
+            return v
+        return secrets.token_urlsafe(32)
 
-@lru_cache()
+    @field_validator("printer_type")
+    @classmethod
+    def _validate_printer(cls, v: str) -> str:
+        allowed = {"usb", "network", "file"}
+        if v not in allowed:
+            raise ValueError(f"printer_type must be one of {allowed}, got {v!r}")
+        return v
+
+
+@lru_cache
 def get_settings() -> Settings:
-    """
-    Cached settings loader.
-
-    Python concept: @lru_cache() means this function is called only ONCE.
-    Subsequent calls return the same object. This is a common FastAPI pattern
-    for dependency injection — routes call get_settings() and always get
-    the same Settings instance.
-    """
-    return Settings()   
+    return Settings()

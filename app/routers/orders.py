@@ -1,9 +1,12 @@
-from datetime import datetime
-from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
+"""
+Order routes. HTTP only; business logic in order_service.
+"""
 
 from datetime import datetime
+
+from fastapi import APIRouter, Depends, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Customer, Product
@@ -16,7 +19,11 @@ router = APIRouter()
 def list_orders_page(request: Request, status: str = "ALL", db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
-    orders = order_service.list_orders(db, status)
+    try:
+        orders = order_service.list_orders(db, status)
+    except Exception:
+        db.rollback()
+        orders = []
     return templates.TemplateResponse(
         request=request,
         name="orders/list.html",
@@ -28,8 +35,18 @@ def list_orders_page(request: Request, status: str = "ALL", db: Session = Depend
 def new_order_form(request: Request, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
-    customers = db.query(Customer).order_by(Customer.name).all()
-    products = db.query(Product).where(Product.is_active == True).order_by(Product.name).all()
+    customers = (
+        db.query(Customer)
+        .where(Customer.is_active.is_(True))
+        .order_by(Customer.name)
+        .all()
+    )
+    products = (
+        db.query(Product)
+        .where(Product.is_active.is_(True))
+        .order_by(Product.name)
+        .all()
+    )
     return templates.TemplateResponse(
         request=request,
         name="orders/form.html",
@@ -37,7 +54,7 @@ def new_order_form(request: Request, db: Session = Depends(get_db)):
             "settings": settings,
             "customers": customers,
             "products": products,
-            "today_date": datetime.now().strftime("%Y-%m-%d"),  # ← ADD
+            "today_date": datetime.now().strftime("%Y-%m-%d"),
         },
     )
 
@@ -48,7 +65,7 @@ def create_order(
     db: Session = Depends(get_db),
     customer_id: int = Form(...),
     delivery_type: str = Form("PICKUP"),
-    delivery_date: str = Form(None),
+    fulfillment_date: str = Form(None),
     delivery_address: str = Form(None),
     notes: str = Form(None),
     advance_paid: float = Form(0),
@@ -60,15 +77,16 @@ def create_order(
     templates = request.app.state.templates
     settings = request.app.state.settings
 
-    items = []
-    for pid, qty in zip(product_id, quantity):
-        items.append({"product_id": pid, "quantity": qty})
+    items = [
+        {"product_id": pid, "quantity": qty}
+        for pid, qty in zip(product_id, quantity, strict=True)
+    ]
 
     data = {
         "customer_id": customer_id,
-        "order_date": order_date,  # ← this must be here
+        "order_date": order_date,
         "delivery_type": delivery_type,
-        "delivery_date": datetime.fromisoformat(delivery_date) if delivery_date else None,
+        "fulfillment_date": fulfillment_date or None,
         "delivery_address": delivery_address or None,
         "notes": notes or None,
         "items": items,
@@ -78,14 +96,31 @@ def create_order(
 
     try:
         order = order_service.create_order(db, data)
-    except Exception as e:
-        customers = db.query(Customer).order_by(Customer.name).all()
-        products = db.query(Product).where(Product.is_active == True).all()
+    except Exception as exc:
+        db.rollback()
+        customers = (
+            db.query(Customer)
+            .where(Customer.is_active.is_(True))
+            .order_by(Customer.name)
+            .all()
+        )
+        products = (
+            db.query(Product)
+            .where(Product.is_active.is_(True))
+            .order_by(Product.name)
+            .all()
+        )
         return templates.TemplateResponse(
             request=request,
             name="orders/form.html",
-            context={"settings": settings, "customers": customers,
-                     "products": products, "error": str(e)},
+            context={
+                "settings": settings,
+                "customers": customers,
+                "products": products,
+                "today_date": datetime.now().strftime("%Y-%m-%d"),
+                "error": str(exc),
+                "form_data": data,
+            },
             status_code=400,
         )
 
@@ -106,8 +141,8 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
 
 @router.post("/{order_id}/status")
 def update_status(order_id: int, status: str = Form(...), db: Session = Depends(get_db)):
-    order_service.update_status(db, order_id, status)
-    return {"ok": True, "status": status}
+    order = order_service.update_status(db, order_id, status)
+    return {"ok": True, "status": order.status.value}
 
 
 @router.post("/{order_id}/payments")
@@ -119,4 +154,4 @@ def add_payment(
     reference: str = Form(None),
 ):
     order_service.record_payment(db, order_id, amount, method, reference)
-    return RedirectResponse(url=f"/orders/{order_id}", status_code=303)   
+    return RedirectResponse(url=f"/orders/{order_id}", status_code=303)
