@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     bind_host: str = "127.0.0.1"
     bind_port: int = 8000
 
+    # --- WhatsApp / Messaging ---
+    whatsapp_enabled: bool = True
+    whatsapp_default_country_code: str = "91"
+    whatsapp_messages_file: str = "config/messages.json"
+
     # --- Printer ---
     printer_type: str = "file"  # "usb" | "network" | "file"
     printer_device: str = ""

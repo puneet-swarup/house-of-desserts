@@ -32,6 +32,7 @@ BASE_URL = f"http://127.0.0.1:{TEST_PORT}"
 # Helpers
 # ---------------------------------------------------------------
 
+
 def _port_open(host: str, port: int) -> bool:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.3)
@@ -51,6 +52,7 @@ def _wait_for_port(host: str, port: int, timeout: float = 20.0) -> None:
 # Live server (session scope, subprocess)
 # ---------------------------------------------------------------
 
+
 @pytest.fixture(scope="session")
 def live_server():
     # Wipe any previous test DB
@@ -69,10 +71,16 @@ def live_server():
 
     proc = subprocess.Popen(
         [
-            sys.executable, "-m", "uvicorn", "app.main:app",
-            "--host", "127.0.0.1",
-            "--port", str(TEST_PORT),
-            "--log-level", "warning",
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(TEST_PORT),
+            "--log-level",
+            "warning",
             "--no-access-log",
         ],
         env=env,
@@ -114,6 +122,7 @@ def live_server():
 # Seeded data (function scope)
 # ---------------------------------------------------------------
 
+
 @pytest.fixture()
 def seeded(live_server):
     """
@@ -148,11 +157,14 @@ def seeded(live_server):
             db.query(model).delete()
         db.commit()
 
-        suffix = uuid.uuid4().hex[:6]
+        # Phone must be pure digits so WhatsApp link building works.
+        # Use a 5-digit numeric suffix — safe for phone + unique per test.
+        num = uuid.uuid4().int % 100000
+        suffix = f"{num:05d}"
 
         c = Customer(
             name=f"UI Customer {suffix}",
-            phone=f"+91 90000 {suffix}",
+            phone=f"90000{suffix}",  # 10 digits total
             email=None,
             is_active=True,
         )
@@ -190,6 +202,7 @@ def seeded(live_server):
 # ---------------------------------------------------------------
 # Convenience: page already navigated to /
 # ---------------------------------------------------------------
+
 
 @pytest.fixture()
 def app_page(browser, live_server):

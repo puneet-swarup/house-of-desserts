@@ -29,18 +29,49 @@ def _product_and_customer_choices(db: Session):
 
 
 @router.get("/", response_class=HTMLResponse)
-def list_orders_page(request: Request, status: str = "ALL", db: Session = Depends(get_db)):
+def list_orders_page(
+    request: Request,
+    status: str = "ALL",
+    q: str = "",
+    page: int = 1,
+    db: Session = Depends(get_db),
+):
     templates = request.app.state.templates
     settings = request.app.state.settings
+
     try:
-        orders = order_service.list_orders(db, status)
+        orders, meta = order_service.search_orders(db, q=q or None, status=status, page=page)
     except Exception:
         db.rollback()
-        orders = []
+        orders, meta = (
+            [],
+            {
+                "q": q,
+                "status": status,
+                "page": 1,
+                "per_page": 25,
+                "total": 0,
+                "pages": 1,
+                "has_prev": False,
+                "has_next": False,
+            },
+        )
+
+    # Attach a message bundle per order (transient — not persisted).
+    from app.services.whatsapp_service import messages_for_order
+
+    for order in orders:
+        order.wa_messages = messages_for_order(order)
+
     return templates.TemplateResponse(
         request=request,
         name="orders/list.html",
-        context={"settings": settings, "orders": orders, "filter": status},
+        context={
+            "settings": settings,
+            "orders": orders,
+            "filter": status,
+            "meta": meta,
+        },
     )
 
 
@@ -216,10 +247,19 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
     templates = request.app.state.templates
     settings = request.app.state.settings
     order = order_service.get_order(db, order_id)
+
+    from app.services.whatsapp_service import messages_for_order
+
+    whatsapp_messages = messages_for_order(order)
+
     return templates.TemplateResponse(
         request=request,
         name="orders/detail.html",
-        context={"settings": settings, "order": order},
+        context={
+            "settings": settings,
+            "order": order,
+            "whatsapp_messages": whatsapp_messages,
+        },
     )
 
 

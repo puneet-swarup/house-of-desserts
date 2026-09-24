@@ -9,15 +9,30 @@
         <a href="/orders/new" class="btn btn-amber btn-sm font-semibold">+ New Order</a>
     </div>
 
+    <!-- Search -->
+    <form method="get" action="/orders" class="flex gap-2 flex-wrap">
+        <input type="hidden" name="status" value="{{ filter }}" />
+        <input type="search" name="q" value="{{ meta.q }}"
+               placeholder="Search order #, customer name, or phone…"
+               class="input input-bordered flex-1"
+               style="min-width: 12rem;"
+               autocomplete="off" />
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if meta.q %}
+        <a href="/orders?status={{ filter }}" class="btn btn-ghost">Clear</a>
+        {% endif %}
+    </form>
+
     <!-- Filter Tabs -->
     <div class="tabs tabs-boxed w-fit overflow-x-auto">
-        <a href="/orders?status=ALL"         class="tab {{ 'tab-active' if filter == 'ALL' else '' }}">All</a>
-        <a href="/orders?status=CONFIRMED"   class="tab {{ 'tab-active' if filter == 'CONFIRMED' else '' }}">Confirmed</a>
-        <a href="/orders?status=IN_PROGRESS" class="tab {{ 'tab-active' if filter == 'IN_PROGRESS' else '' }}">In Progress</a>
-        <a href="/orders?status=READY"       class="tab {{ 'tab-active' if filter == 'READY' else '' }}">Ready</a>
-        <a href="/orders?status=DELIVERED"   class="tab {{ 'tab-active' if filter == 'DELIVERED' else '' }}">Delivered</a>
-        <a href="/orders?status=PAID"        class="tab {{ 'tab-active' if filter == 'PAID' else '' }}">Paid</a>
-        <a href="/orders?status=CANCELLED"   class="tab {{ 'tab-active' if filter == 'CANCELLED' else '' }}">Cancelled</a>
+        {% set qs = '&q=' ~ meta.q if meta.q else '' %}
+        <a href="/orders?status=ALL{{ qs }}"         class="tab {{ 'tab-active' if filter == 'ALL' else '' }}">All</a>
+        <a href="/orders?status=CONFIRMED{{ qs }}"   class="tab {{ 'tab-active' if filter == 'CONFIRMED' else '' }}">Confirmed</a>
+        <a href="/orders?status=IN_PROGRESS{{ qs }}" class="tab {{ 'tab-active' if filter == 'IN_PROGRESS' else '' }}">In Progress</a>
+        <a href="/orders?status=READY{{ qs }}"       class="tab {{ 'tab-active' if filter == 'READY' else '' }}">Ready</a>
+        <a href="/orders?status=DELIVERED{{ qs }}"   class="tab {{ 'tab-active' if filter == 'DELIVERED' else '' }}">Delivered</a>
+        <a href="/orders?status=PAID{{ qs }}"        class="tab {{ 'tab-active' if filter == 'PAID' else '' }}">Paid</a>
+        <a href="/orders?status=CANCELLED{{ qs }}"   class="tab {{ 'tab-active' if filter == 'CANCELLED' else '' }}">Cancelled</a>
     </div>
 
     {% if orders %}
@@ -31,7 +46,7 @@
                             {{ order.order_number }}
                         </a>
                         <p class="text-sm text-base-content/60 truncate">
-                            {{ order.customer.name }}
+                            {{ order.customer.name }} · {{ order.customer.phone }}
                             {% if order.delivery_type == 'DELIVERY' %} · 🚚{% else %} · 🏠 Pickup{% endif %}
                         </p>
                         <p class="text-xs text-base-content/50 mt-1">
@@ -58,48 +73,199 @@
                     </div>
                 </div>
 
-                {% if order.status.value not in ['CANCELLED', 'PAID'] %}
-                <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-base-200">
-                    {% set next_status = {
-                        'INQUIRY': 'CONFIRMED',
-                        'CONFIRMED': 'IN_PROGRESS',
-                        'IN_PROGRESS': 'READY',
-                        'READY': 'DELIVERED',
-                        'DELIVERED': 'PAID'
-                    }.get(order.status.value) %}
-                    {% if next_status %}
-                    <form hx-post="/orders/{{ order.id }}/status"
-                          hx-vals='{"status": "{{ next_status }}"}'
-                          hx-swap="none"
-                          hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
-                        <button class="btn btn-sm btn-primary">Mark {{ next_status.replace('_', ' ') }}</button>
-                    </form>
+                <div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-base-200 items-center">
+                    {% if order.wa_messages %}
+                    <button type="button"
+                            class="btn btn-sm btn-outline"
+                            onclick="waOpen({{ order.id }})"
+                            title="Message {{ order.customer.name }}">
+                        💬 Message
+                    </button>
                     {% endif %}
-                    <form hx-post="/orders/{{ order.id }}/status"
-                          hx-vals='{"status": "CANCELLED"}'
-                          hx-confirm="Cancel this order?"
-                          hx-swap="none"
-                          hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
-                        <button class="btn btn-sm btn-outline btn-error">Cancel</button>
-                    </form>
+
+                    {% if order.status.value not in ['CANCELLED', 'PAID'] %}
+                        {% set next_status = {
+                            'INQUIRY': 'CONFIRMED',
+                            'CONFIRMED': 'IN_PROGRESS',
+                            'IN_PROGRESS': 'READY',
+                            'READY': 'DELIVERED',
+                            'DELIVERED': 'PAID'
+                        }.get(order.status.value) %}
+                        {% if next_status %}
+                        <form hx-post="/orders/{{ order.id }}/status"
+                              hx-vals='{"status": "{{ next_status }}"}'
+                              hx-swap="none"
+                              hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+                            <button class="btn btn-sm btn-primary">Mark {{ next_status.replace('_', ' ') }}</button>
+                        </form>
+                        {% endif %}
+                        <form hx-post="/orders/{{ order.id }}/status"
+                              hx-vals='{"status": "CANCELLED"}'
+                              hx-confirm="Cancel this order?"
+                              hx-swap="none"
+                              hx-on::after-request="setTimeout(() => window.location.reload(), 300)">
+                            <button class="btn btn-sm btn-outline btn-error">Cancel</button>
+                        </form>
+                    {% endif %}
                 </div>
-                {% endif %}
             </div>
         </div>
         {% endfor %}
     </div>
+
+    <!-- Pagination -->
+    {% if meta.pages > 1 %}
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <p class="text-sm text-base-content/60">
+            Showing {{ orders|length }} of {{ meta.total }} (page {{ meta.page }} of {{ meta.pages }})
+        </p>
+        <div class="join">
+            {% if meta.has_prev %}
+            <a href="/orders?status={{ filter }}&q={{ meta.q }}&page={{ meta.page - 1 }}"
+               class="join-item btn btn-sm">« Prev</a>
+            {% else %}
+            <button class="join-item btn btn-sm" disabled>« Prev</button>
+            {% endif %}
+            {% if meta.has_next %}
+            <a href="/orders?status={{ filter }}&q={{ meta.q }}&page={{ meta.page + 1 }}"
+               class="join-item btn btn-sm">Next »</a>
+            {% else %}
+            <button class="join-item btn btn-sm" disabled>Next »</button>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
     {% else %}
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body text-center py-12">
             <p class="text-5xl mb-4">📋</p>
-            <h2 class="text-xl font-bold">No orders found</h2>
-            <p class="text-base-content/60 mt-1">
-                {% if filter != 'ALL' %}No orders with status "{{ filter }}".{% else %}Create your first order.{% endif %}
-            </p>
-            <a href="/orders/new" class="btn btn-amber mt-4">+ New Order</a>
+            {% if meta.q %}
+                <h2 class="text-xl font-bold">No orders match "{{ meta.q }}"</h2>
+                <p class="text-base-content/60 mt-1">Try an order number, customer name, or phone.</p>
+                <a href="/orders?status={{ filter }}" class="btn btn-ghost mt-4">Clear search</a>
+            {% elif filter != 'ALL' %}
+                <h2 class="text-xl font-bold">No orders with status "{{ filter }}"</h2>
+                <a href="/orders" class="btn btn-ghost mt-4">Show all orders</a>
+            {% else %}
+                <h2 class="text-xl font-bold">No orders yet</h2>
+                <p class="text-base-content/60 mt-1">Create your first order.</p>
+                <a href="/orders/new" class="btn btn-amber mt-4">+ New Order</a>
+            {% endif %}
         </div>
     </div>
     {% endif %}
 
 </div>
+{% endblock %}
+
+{% block modals %}
+<dialog id="wa-modal" class="modal modal-bottom sm:modal-middle"
+        onclick="if (event.target === this) waClose()">
+    <div class="modal-box max-w-lg">
+        <h3 class="font-extrabold text-lg text-amber-900" id="wa-title">Message customer</h3>
+        <p class="text-xs text-base-content/60 mt-1 mb-3">
+            Pick a message. Edit the text if needed. Opens WhatsApp ready to send.
+        </p>
+
+        <div class="form-control">
+            <label class="label"><span class="label-text font-semibold">Message type</span></label>
+            <select id="wa-trigger" class="select select-bordered w-full" onchange="waUpdate()"></select>
+        </div>
+
+        <div class="form-control mt-3">
+            <label class="label"><span class="label-text font-semibold">Message</span></label>
+            <textarea id="wa-text" rows="6" class="textarea textarea-bordered w-full"
+                      oninput="waSync()"></textarea>
+        </div>
+
+        <div class="modal-action">
+            <button type="button" class="btn btn-ghost" onclick="waClose()">Cancel</button>
+            <button type="button" class="btn btn-outline" onclick="waCopy()">Copy</button>
+            <a id="wa-open" href="#" target="_blank" rel="noopener" class="btn btn-primary">Open WhatsApp</a>
+        </div>
+    </div>
+</dialog>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const WA_BY_ORDER = {
+{% for order in orders %}
+  {{ order.id }}: {
+    customer: {{ order.customer.name|tojson }},
+    phone: {{ order.customer.phone|tojson }},
+    status: {{ order.status.value|tojson }},
+    messages: {{ (order.wa_messages or [])|tojson }}
+  }{% if not loop.last %},{% endif %}
+{% endfor %}
+};
+
+const WA_PREFERRED_BY_STATUS = {
+    'CONFIRMED': 'confirmed',
+    'IN_PROGRESS': 'out_for_delivery',
+    'READY': 'ready',
+    'DELIVERED': 'delivered'
+};
+
+let waCurrent = null;
+
+function waOpen(orderId) {
+    const bundle = WA_BY_ORDER[orderId];
+    if (!bundle || !bundle.messages.length) return;
+
+    waCurrent = bundle;
+
+    document.getElementById('wa-title').textContent = `Message ${bundle.customer}`;
+
+    const sel = document.getElementById('wa-trigger');
+    sel.innerHTML = bundle.messages
+        .map(m => `<option value="${m.key}">${m.label}</option>`)
+        .join('');
+
+    // Prefer the message that matches the order's current status
+    const preferred = WA_PREFERRED_BY_STATUS[bundle.status];
+    const idx = preferred
+        ? bundle.messages.findIndex(m => m.key === preferred)
+        : -1;
+    sel.selectedIndex = idx >= 0 ? idx : 0;
+
+    waUpdate();
+    document.getElementById('wa-modal').showModal();
+}
+
+function waClose() {
+    document.getElementById('wa-modal').close();
+}
+
+function waUpdate() {
+    if (!waCurrent) return;
+    const key = document.getElementById('wa-trigger').value;
+    const found = waCurrent.messages.find(m => m.key === key);
+    if (!found) return;
+    document.getElementById('wa-text').value = found.message;
+    document.getElementById('wa-open').href = found.url;
+}
+
+function waSync() {
+    if (!waCurrent) return;
+    const text = document.getElementById('wa-text').value;
+    const digits = (waCurrent.phone || '').replace(/\D+/g, '');
+    const normalized = digits.length === 10
+        ? '{{ settings.whatsapp_default_country_code }}' + digits
+        : digits;
+    document.getElementById('wa-open').href =
+        `https://wa.me/${normalized}?text=${encodeURIComponent(text)}`;
+}
+
+async function waCopy() {
+    const text = document.getElementById('wa-text').value;
+    try {
+        await navigator.clipboard.writeText(text);
+        toast('Message copied', 'success');
+    } catch (e) {
+        toast('Copy failed — select and copy manually', 'error');
+    }
+}
+</script>
 {% endblock %}
