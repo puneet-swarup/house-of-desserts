@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     Path("data").mkdir(exist_ok=True)
     Path("data/invoices").mkdir(parents=True, exist_ok=True)
     Path(settings.backup_dir).mkdir(exist_ok=True)
+    Path(settings.reports_dir).mkdir(exist_ok=True)
 
     from app import models  # noqa: F401
 
@@ -87,6 +88,7 @@ from app.routers import (  # noqa: E402
     invoices,
     orders,
     products,
+    reports,
     today,
 )
 from app.routers import settings as settings_router  # noqa: E402
@@ -98,6 +100,7 @@ app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(products.router, prefix="/products", tags=["products"])
 app.include_router(invoices.router, prefix="/invoices", tags=["invoices"])
 app.include_router(export.router, prefix="/export", tags=["export"])
+app.include_router(reports.router, prefix="/reports", tags=["reports"])
 app.include_router(audit.router, prefix="/audit", tags=["audit"])
 app.include_router(settings_router.router, prefix="/settings", tags=["settings"])
 
