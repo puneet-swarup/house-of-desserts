@@ -1,22 +1,25 @@
 # House of Desserts
 
-A self-hosted order management system for a home bakery.
+A self-hosted order management system for a small bakery.
 
-Built for speed, offline-first operation, and zero infrastructure cost.
-Runs on a laptop or a mini PC on your home network and is reachable
-from anywhere via Tailscale.
+Built for speed, offline-friendly operation, and zero infrastructure cost.
+Runs on a free-tier cloud VM, reachable from any device via Tailscale.
 
-## Features
+## What it does
 
-- **Order lifecycle** — INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID, with CANCELLED as a terminal branch
-- **Customer book** with multiple addresses and search
-- **Product catalog** with SKU, HSN, GST rate, and soft delete
-- **Payment tracking** — partial payments, auto-PAID on full settlement
-- **Invoices** — immutable snapshots with sequential numbering, PDF export, and thermal receipt
-- **Audit trail** — append-only log of every mutation, written in the same transaction as the mutation
-- **Dashboard** — today's orders, pending delivery, outstanding balance, active products
-- **Exports** — monthly CSV/JSON for tax filing
-- **Thermal printer support** — file, USB, or network ESC/POS
+- **Order lifecycle** — INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID (terminal), or CANCELLED (terminal). Illegal transitions rejected.
+- **Edit orders** — while CONFIRMED, with audit trail, guarded so the total can't drop below what's already been paid.
+- **Today page** — dispatch list (orders fulfilling today, sorted by time) plus production needs aggregated by SKU across the next 7 days.
+- **Customers** — multiple addresses, one default, search by name or phone, paginated.
+- **Products** — SKU auto-generated from name + weight + pack, editable, live uniqueness check, weight/volume and pack size support, soft delete.
+- **Orders** — search by order number, customer name, or phone; paginate; filter by status.
+- **Payments** — partial payments tracked separately from fulfillment. Two badges everywhere: fulfillment state and payment state.
+- **Invoices** — immutable snapshot at issue time. Sequential numbering. PDF export (fpdf2) and thermal receipt (ESC/POS).
+- **WhatsApp links** — one-tap messages to customers, configurable templates, no API keys needed.
+- **Monthly reports** — PDF and CSV summaries, generated manually or automatically on the 1st of the month.
+- **Exports** — CSV and JSON for tax filing.
+- **Audit log** — append-only, written in the same transaction as the mutation it describes.
+- **Backups** — nightly local (30-day retention) and offsite to Google Drive via rclone.
 
 ## Stack
 
@@ -28,8 +31,20 @@ from anywhere via Tailscale.
 | PDF | fpdf2 (Noto font for ₹) |
 | Printing | python-escpos |
 | Config | pydantic-settings |
+| Remote access | Tailscale |
+| Hosting | Oracle Cloud Free Tier (or any Linux VM) |
+| Offsite backups | rclone → Google Drive |
 
-## Quick start
+## Screenshots
+
+### Today — dispatch and production
+
+![Today page](docs/screenshots/today.png)
+
+### Orders — search, filter, status at a glance
+
+![Orders list](docs/screenshots/orders.png)
+## Quick start (local dev)
 
 ```powershell
 git clone https://github.com/puneet-swarup/house-of-desserts.git
@@ -41,51 +56,56 @@ python -m venv .venv
 pip install -e ".[dev]"
 
 Copy-Item .env.example .env
-# Edit .env: set SECRET_KEY, DEBUG=false, optionally GSTIN etc.
-
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 # Paste output into SECRET_KEY in .env
 
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open http://127.0.0.1:8000
+Open http://127.0.0.1:8000 — it redirects to `/today`.
 
 ## Configuration
 
-All configuration lives in `.env`. See `.env.example` for the full list.
+All settings live in `.env`. See `.env.example` for the full list.
 
 | Variable | Purpose |
 |---|---|
 | `APP_NAME`, `APP_TAGLINE` | Shown on invoices and the UI |
 | `GSTIN`, `FSSAI_NUMBER` | Printed on invoices if set |
 | `SECRET_KEY` | Session signing. **Required** — generate a real one |
-| `DEBUG` | `true` in dev, `false` in prod. `true` logs every SQL query |
-| `BUSINESS_TIMEZONE` | Used for "today" and report boundaries, default `Asia/Kolkata` |
+| `DEBUG` | `true` in dev, `false` in prod |
+| `BUSINESS_TIMEZONE` | "Today" boundaries, default `Asia/Kolkata` |
+| `DB_URL` | SQLite path. Use absolute paths in production |
 | `BIND_HOST`, `BIND_PORT` | Where uvicorn listens |
 | `PRINTER_TYPE` | `file`, `usb`, or `network` |
-| `BACKUP_DIR` | Where SQLite backups are written |
+| `BACKUP_DIR` | Where nightly SQLite backups are written |
+| `REPORTS_DIR` | Where monthly PDFs and CSVs are written |
+| `WHATSAPP_ENABLED` | Toggle WhatsApp buttons |
+| `WHATSAPP_MESSAGES_FILE` | Path to message templates JSON |
 
 ## Data model
 
 - **Customer** — soft delete via `is_active`, partial unique index on phone
-- **Address** — multiple per customer, one default
-- **Product** — soft delete, partial unique index on SKU
+- **Address** — multiple per customer, exactly one default
+- **Product** — soft delete, weight/volume, pack size, GST rate
 - **Order** — human-readable `HOD-YYYY-NNNN` number from a sequence table
 - **OrderItem** — frozen unit price, GST rate, GST amount, line total (all `Numeric`)
-- **Payment** — one row per transaction, `received_at` explicit
-- **Invoice** — immutable snapshot: business identity, billed-to, line items as JSON, and all totals as of issue time
+- **Payment** — one row per transaction, explicit `received_at`
+- **Invoice** — immutable snapshot: business identity, billed-to, line items as JSON, all totals as of issue time
 - **NumberSequence** — monotonic counter per prefix; guarantees gapless numbering
-- **AuditLog** — append-only; written in the same transaction as the mutation it describes
+- **AuditLog** — append-only; commits with the mutation it describes
 
 ## Development
 
 ```powershell
-# Run unit tests (fast, no browser)
+# Fast tests (no browser) — ~5 seconds
 pytest
 
-# Run UI tests (requires running app)
+# Browser-based UI tests — ~50 seconds
 pytest tests/ui -v
+
+# Lint
+ruff check app tests
 ```
 
 ### Project layout
@@ -93,44 +113,51 @@ pytest tests/ui -v
 ```
 app/
   config.py              Typed settings from .env
-  database.py            Engine, session, PRAGMAs, get_db dependency
-  main.py                App factory, routers, filters
+  database.py            Engine, session, PRAGMAs
+  main.py                App factory, routers, Jinja filters
+  middleware.py          Cache-control headers
   models/                SQLAlchemy 2.0 declarative models
-  schemas/               Pydantic request/response models
   routers/               HTTP endpoints
-  services/              Business logic — called by routers
+  services/              Business logic
   utils/
     money.py             Decimal helpers
     time.py              Naive-UTC storage + business-tz display
+    sku.py               SKU generation and normalization
     escpos_printer.py    Thermal printer
   templates/             Jinja2 + HTMX + daisyUI
   static/                Pre-built Tailwind, fonts, favicon
 
+scripts/
+  backup.py              Nightly backup script
+  monthly_report.py      Monthly report generator (for cron)
+
 tests/
   conftest.py            Fixtures (in-memory SQLite with FK ON)
-  test_money.py          Decimal rounding, GST split
-  test_numbering.py      Sequential, gapless
-  test_status_machine.py Legal/illegal transitions
-  test_invoice_snapshot.py  Invoice is immutable
-  test_soft_delete.py    Delete → recreate works
-  test_fk_enforcement.py Proves PRAGMA is on
   ui/                    Playwright tests
+  ...
+
+config/
+  messages.json          WhatsApp message templates
 ```
 
 ## Key design decisions
 
-- **Money is `Decimal`, never `Float`.** Columns are `Numeric(12,2)`. Every calculation goes through `app.utils.money.money()`. Rounding is per-line, half-up, and documented in `money.py`.
-- **Invoices are immutable.** At issue time we snapshot business identity, billed-to, line items, and totals into the invoice row. Editing the order afterwards does not change the invoice.
-- **Order and invoice numbers come from a sequence table**, not a count. Gapless, concurrency-safe, unique-constrained.
-- **Audit writes commit with the mutation.** `log_action` never commits on its own. A failed audit write rolls back the whole transaction.
-- **Foreign keys are enforced** via `PRAGMA foreign_keys=ON` on every connection. Cascade deletes work.
-- **WAL + busy_timeout** so backups and app writes don't deadlock.
+- **Money is `Decimal`, never `Float`.** Columns are `Numeric(12,2)`. All arithmetic goes through `app.utils.money.money()`. Per-line rounding, half-up.
+- **Invoices are immutable.** Editing an order after issuing does not change the invoice.
+- **Numbering comes from a sequence table**, not a count. Concurrency-safe and gapless.
+- **Audit writes commit with the mutation.** `log_action` never commits on its own.
+- **Foreign keys are enforced** via `PRAGMA foreign_keys=ON` on every connection.
+- **WAL + busy_timeout** so backups and writes don't deadlock.
 - **Naive UTC storage, business-tz display.** See `app/utils/time.py`.
+- **Fulfillment and payment are orthogonal.** Two separate badges, two separate state machines.
+- **Tailscale-only access in production.** No ports open to the public internet.
 
 ## Operations
 
-See [docs/OPERATIONS.md](docs/OPERATIONS.md) for backup, restore, deploy, and troubleshooting.
+- Local: see [docs/OPERATIONS.md](docs/OPERATIONS.md)
+- Deployment, recovery, and cron: held in a private companion repo (coordinates and secrets)
 
 ## License
 
-Private — not for redistribution.
+All rights reserved. This source is published for portfolio and evaluation
+purposes only. See [LICENSE](LICENSE) for terms.
