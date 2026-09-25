@@ -67,4 +67,6 @@ data/receipt_preview.bin
 data/test_ui.db
 data/test_ui.db-wal
 data/test_ui.db-shm
+
 backups/
+reports/
