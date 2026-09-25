@@ -1,0 +1,28 @@
+Monthly Report,September 2026
+Generated,2026-09-26 02:50
+
+Summary
+Orders (total),1
+Orders (non-cancelled),1
+Orders cancelled,0
+Revenue,104.99
+GST collected,5.00
+Amount received,0.00
+Outstanding,104.99
+Average order value,104.99
+
+Orders by status
+CONFIRMED,1
+
+Orders by payment state
+paid,0
+partial,0
+unpaid,1
+
+Top products
+SKU,Name,Quantity,Revenue
+CHOC-500,Chocolate Truffle 500g,1,104.99
+
+Itemized orders
+Order Number,Date,Customer,Phone,Status,Payment,Total,GST,Paid,Balance
+HOD-2026-0001,2026-09-15 00:00,Anita Rao,9876543210,CONFIRMED,unpaid,104.99,5.00,0.00,104.99

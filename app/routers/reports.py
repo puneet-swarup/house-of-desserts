@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -44,8 +44,8 @@ def reports_page(
 
 @router.post("/generate", response_class=HTMLResponse)
 def generate(
-    year: int = Query(..., ge=2000, le=2100),
-    month: int = Query(..., ge=1, le=12),
+    year: int = Form(..., ge=2000, le=2100),
+    month: int = Form(..., ge=1, le=12),
     db: Session = Depends(get_db),
 ):
     try:
