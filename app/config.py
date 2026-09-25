@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     backup_dir: str = "./backups"
     backup_schedule: str = "daily"
 
+    # --- Reports ---
+    reports_dir: str = "./reports"
+
     # --- Invoice Numbering ---
     invoice_prefix: str = "HOD"
     invoice_start_number: int = 1

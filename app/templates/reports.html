@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}Reports — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-4">
+
+    <div class="flex items-center justify-between flex-wrap gap-2">
+        <h1 class="text-2xl font-extrabold text-amber-900">Monthly Reports</h1>
+        <a href="/" class="btn btn-ghost btn-sm">← Today</a>
+    </div>
+
+    {% if generated %}
+    <div class="alert alert-success">
+        <span>Report <strong>{{ generated }}</strong> generated successfully.</span>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert-error">
+        <span>Generation failed: {{ error }}</span>
+    </div>
+    {% endif %}
+
+    <!-- Generate -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-3">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Generate a report</h2>
+            <form method="post" action="/reports/generate"
+                  style="display: flex; gap: 0.5rem; flex-wrap: wrap; width: 100%; align-items: flex-end;">
+
+                <div class="form-control" style="flex: 0 0 8rem;">
+                    <label class="label"><span class="label-text font-semibold">Month</span></label>
+                    <select name="month" class="select select-bordered select-sm w-full">
+                        {% for i in range(1, 13) %}
+                        <option value="{{ i }}" {% if i == now_month %}selected{% endif %}>
+                            {{ month_names[i] }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-control" style="flex: 0 0 7rem;">
+                    <label class="label"><span class="label-text font-semibold">Year</span></label>
+                    <select name="year" class="select select-bordered select-sm w-full">
+                        {% for y in [now_year, now_year - 1, now_year - 2] %}
+                        <option value="{{ y }}">{{ y }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-sm"
+                        style="flex: 0 0 auto;">
+                    Generate
+                </button>
+            </form>
+            <p class="text-xs text-base-content/60">
+                Generating a report for the current month works — the numbers reflect
+                data up to now. Regenerating overwrites the previous files.
+            </p>
+        </div>
+    </div>
+
+    <!-- Existing -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Previously generated</h2>
+
+            {% if reports %}
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Period</th>
+                            <th>Generated</th>
+                            <th class="text-right">Downloads</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in reports %}
+                        <tr class="hover">
+                            <td class="font-semibold">{{ r.period_label }}</td>
+                            <td class="text-sm text-base-content/60">
+                                {{ r.generated_at.strftime('%d %b %Y, %H:%M') }}
+                            </td>
+                            <td>
+                                <div class="flex gap-1 justify-end flex-wrap">
+                                    {% if r.pdf %}
+                                    <a href="/reports/download/{{ '%04d-%02d'|format(r.year, r.month) }}.pdf"
+                                       class="btn btn-outline btn-xs">PDF</a>
+                                    {% endif %}
+                                    {% if r.csv %}
+                                    <a href="/reports/download/{{ '%04d-%02d'|format(r.year, r.month) }}.csv"
+                                       class="btn btn-outline btn-xs">CSV</a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-base-content/50 py-4 text-center">
+                No reports generated yet. Pick a month and click Generate.
+            </p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- What's in a report -->
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">What's in a report</h2>
+            <ul class="text-sm space-y-1 list-disc list-inside text-base-content/70">
+                <li>Summary: orders, revenue, GST, received, outstanding, average</li>
+                <li>Breakdown by fulfillment status and payment state</li>
+                <li>Top 10 products by revenue</li>
+                <li>Itemized list of every order in the month</li>
+            </ul>
+            <p class="text-xs text-base-content/50 mt-2">
+                Files are saved on the server and synced to Google Drive nightly.
+            </p>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
