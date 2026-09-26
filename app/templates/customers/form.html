@@ -56,22 +56,19 @@
                     </button>
                 </div>
 
-                {# --- Existing addresses (edit mode) --- #}
                 {% if customer %}
                 {% set active_addrs = customer.addresses | selectattr('is_active') | list %}
                 {% if active_addrs %}
                 <div class="space-y-3">
                     {% for addr in active_addrs %}
                     <div class="p-3 rounded-lg bg-base-200 border border-base-300">
-                        <div style="display: flex; gap: 0.5rem; align-items: flex-start; width: 100%;">
+                        <div class="flex gap-2 items-start">
                             <input type="text" name="addr_edit_{{ addr.id }}_label"
                                    value="{{ addr.label or '' }}"
-                                   class="input input-bordered input-sm"
-                                   style="width: 5.5rem; flex-shrink: 0; font-weight: 600;" />
+                                   class="input input-bordered input-sm w-24 shrink-0 font-semibold" />
                             <textarea name="addr_edit_{{ addr.id }}_line" rows="2"
-                                      class="textarea textarea-bordered textarea-sm"
-                                      style="flex: 1 1 0%; min-width: 0;">{{ addr.line or '' }}</textarea>
-                            <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 3.5rem;">
+                                      class="textarea textarea-bordered textarea-sm flex-1 min-w-0">{{ addr.line or '' }}</textarea>
+                            <div class="flex flex-col items-center shrink-0 w-14">
                                 <input type="checkbox"
                                        data-def-toggle
                                        data-existing="true"
@@ -81,8 +78,7 @@
                                        class="toggle toggle-sm toggle-amber" />
                                 <span class="text-[10px] text-base-content/50 leading-none mt-0.5">Default</span>
                             </div>
-                            <button type="button" class="btn btn-ghost btn-xs text-error"
-                                    style="flex-shrink: 0;"
+                            <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
                                     onclick="softDeleteAddr({{ customer.id }}, {{ addr.id }})">✕</button>
                         </div>
                     </div>
@@ -91,26 +87,22 @@
                 {% endif %}
                 {% endif %}
 
-                {# --- New address rows --- #}
                 <div id="new-addresses-container" class="space-y-3">
                     {% if not customer %}
-                    <div class="addr-new-row" style="display: flex; gap: 0.5rem; align-items: flex-start; width: 100%;">
+                    <div class="addr-new-row flex gap-2 items-start">
                         <input type="text" name="addr_new_label" value="Home"
-                               class="input input-bordered input-sm"
-                               style="width: 5.5rem; flex-shrink: 0;"
+                               class="input input-bordered input-sm w-24 shrink-0"
                                placeholder="Label" />
                         <textarea name="addr_new_line" rows="2"
-                                  class="textarea textarea-bordered textarea-sm"
-                                  style="flex: 1 1 0%; min-width: 0;"
+                                  class="textarea textarea-bordered textarea-sm flex-1 min-w-0"
                                   placeholder="Full address"></textarea>
-                        <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 3.5rem;">
+                        <div class="flex flex-col items-center shrink-0 w-14">
                             <input type="hidden" name="addr_new_default" value="1" />
                             <input type="checkbox" data-def-toggle checked
                                    class="toggle toggle-sm toggle-amber" />
                             <span class="text-[10px] text-base-content/50 leading-none mt-0.5">Default</span>
                         </div>
-                        <button type="button" class="btn btn-ghost btn-xs text-error"
-                                style="flex-shrink: 0;"
+                        <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
                                 onclick="this.closest('.addr-new-row').remove()">✕</button>
                     </div>
                     <p class="text-xs text-base-content/50">
@@ -120,23 +112,20 @@
                 </div>
 
                 <template id="addr-row-template">
-                    <div class="addr-new-row" style="display: flex; gap: 0.5rem; align-items: flex-start; width: 100%;">
+                    <div class="addr-new-row flex gap-2 items-start">
                         <input type="text" name="addr_new_label" value="Home"
-                               class="input input-bordered input-sm"
-                               style="width: 5.5rem; flex-shrink: 0;"
+                               class="input input-bordered input-sm w-24 shrink-0"
                                placeholder="Label" />
                         <textarea name="addr_new_line" rows="2"
-                                  class="textarea textarea-bordered textarea-sm"
-                                  style="flex: 1 1 0%; min-width: 0;"
+                                  class="textarea textarea-bordered textarea-sm flex-1 min-w-0"
                                   placeholder="Full address"></textarea>
-                        <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 3.5rem;">
+                        <div class="flex flex-col items-center shrink-0 w-14">
                             <input type="hidden" name="addr_new_default" value="0" />
                             <input type="checkbox" data-def-toggle
                                    class="toggle toggle-sm toggle-amber" />
                             <span class="text-[10px] text-base-content/50 leading-none mt-0.5">Default</span>
                         </div>
-                        <button type="button" class="btn btn-ghost btn-xs text-error"
-                                style="flex-shrink: 0;"
+                        <button type="button" class="btn btn-ghost btn-xs text-error shrink-0"
                                 onclick="this.closest('.addr-new-row').remove()">✕</button>
                     </div>
                 </template>
@@ -165,21 +154,17 @@ function softDeleteAddr(cid, addrId) {
         .then(r => { if (r.ok) location.reload(); });
 }
 
-// Single handler for every default toggle (existing and new).
 document.addEventListener('change', function (e) {
     const cb = e.target;
     if (!cb.matches('input[data-def-toggle]')) return;
 
     const isExisting = cb.dataset.existing === 'true';
 
-    // Existing address toggle
     if (isExisting) {
         if (!cb.checked) {
-            // Cannot uncheck the only default — restore state.
             cb.checked = true;
             return;
         }
-        // Persist immediately.
         const cid = cb.dataset.customerId;
         const aid = cb.dataset.addrId;
         fetch(`/customers/${cid}/addresses/${aid}/set-default`, { method: 'POST' })
@@ -187,13 +172,11 @@ document.addEventListener('change', function (e) {
         return;
     }
 
-    // New-row toggle
     const parent = cb.parentElement;
     const hidden = parent.querySelector('input[name="addr_new_default"]');
     if (hidden) hidden.value = cb.checked ? '1' : '0';
 
     if (cb.checked) {
-        // Uncheck every OTHER toggle (existing and new) and sync their hidden inputs.
         document.querySelectorAll('input[data-def-toggle]').forEach(other => {
             if (other === cb) return;
             other.checked = false;

@@ -158,7 +158,7 @@
             <div class="card-body">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Money</h2>
 
-                <div class="space-y-1 text-sm" style="max-width: 20rem;">
+                <div class="space-y-1 text-sm max-w-xs">
                     <div class="flex justify-between">
                         <span class="text-base-content/60">Total</span>
                         <span class="font-semibold">{{ order.total_amount|money }}</span>
@@ -177,15 +177,13 @@
 
                 {% if order.balance_due > 0 and order.status.value != "CANCELLED" %}
                 <form method="post" action="/orders/{{ order.id }}/payments"
-                      class="mt-4 space-y-2" style="max-width: 20rem;">
-                    <div style="display: flex; gap: 0.5rem;">
+                      class="mt-4 space-y-2 max-w-xs">
+                    <div class="flex gap-2">
                         <input type="number" step="0.01" min="0.01" name="amount"
-                               class="input input-bordered input-sm"
-                               style="flex: 1 1 auto; min-width: 0;"
+                               class="input input-bordered input-sm flex-1 min-w-0"
                                placeholder="Amount"
                                value="{{ '%.2f'|format(order.balance_due) }}" required />
-                        <select name="method" class="select select-bordered select-sm"
-                                style="flex: 0 0 6rem;">
+                        <select name="method" class="select select-bordered select-sm w-24 shrink-0">
                             <option value="CASH">Cash</option>
                             <option value="UPI">UPI</option>
                             <option value="BANK">Bank</option>
@@ -251,8 +249,9 @@
 {% endblock %}
 
 {% block scripts %}
+{% if whatsapp_messages %}
 <script>
-const WA_MESSAGES = {{ whatsapp_messages|tojson if whatsapp_messages else '[]' }};
+const WA_MESSAGES = {{ whatsapp_messages|tojson }};
 let waCurrentUrl = '';
 
 function openWa() {
@@ -273,7 +272,6 @@ function waUpdate() {
     document.getElementById('wa-open').href = found.url;
 }
 function waSync() {
-    // User edited the text — rebuild the URL client-side
     const phone = {{ order.customer.phone|tojson }};
     const text = document.getElementById('wa-text').value;
     const digits = phone.replace(/\D+/g, '');
@@ -293,4 +291,5 @@ async function waCopy() {
     }
 }
 </script>
+{% endif %}
 {% endblock %}

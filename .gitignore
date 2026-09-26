@@ -60,6 +60,9 @@ node_modules/
 *.dylib
 tailwindcss
 tailwindcss.exe
+daisyui.mjs
+daisyui.css
+tailwind.js
 
 # Runtime data artifacts
 data/invoices/

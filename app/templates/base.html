@@ -53,7 +53,7 @@
                     <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
-                    <ul class="dropdown-content menu bg-base-100 rounded-box shadow-lg z-50 mt-2 w-44 p-2">
+                    <ul class="dropdown-content menu bg-base-100 rounded-lg shadow-lg z-50 mt-2 w-48 p-2">
                         <li>
                             <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">
                                 📊 Reports
@@ -98,7 +98,7 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Mobile FAB: Quick New Order -->
+    <!-- Mobile FAB -->
     <a href="/orders/new"
        class="btn btn-circle btn-primary fixed bottom-6 right-6 z-30 shadow-lg md:hidden">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -145,6 +145,13 @@
     });
     document.body.addEventListener('htmx:sendError', function () {
         if (typeof toast === 'function') toast('Network error', 'error');
+    });
+
+    // Close open nav dropdown when clicking outside
+    document.addEventListener('click', function (e) {
+        document.querySelectorAll('details.dropdown[open]').forEach(function (d) {
+            if (!d.contains(e.target)) d.removeAttribute('open');
+        });
     });
     </script>
 
