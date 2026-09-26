@@ -9,9 +9,52 @@
     <script src="/static/js/htmx.min.js"></script>
     <script src="/static/js/htmx.min.js"></script>
     <style>
-        .nav-more > summary { list-style: none; cursor: pointer; }
+        /* Nav dropdown — self-contained, no Tailwind/daisyUI dependency */
+        .nav-more {
+            position: relative;
+            display: inline-block;
+        }
+        .nav-more > summary {
+            list-style: none;
+            cursor: pointer;
+            user-select: none;
+        }
         .nav-more > summary::-webkit-details-marker { display: none; }
         .nav-more > summary::marker { content: ""; }
+        .nav-more-menu {
+            position: absolute;
+            top: calc(100% + 0.4rem);
+            right: 0;
+            min-width: 11rem;
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+            padding: 0.35rem;
+            z-index: 100;
+            display: none;
+        }
+        .nav-more[open] .nav-more-menu {
+            display: block;
+        }
+        .nav-more-menu a {
+            display: block;
+            padding: 0.5rem 0.85rem;
+            border-radius: 0.35rem;
+            font-size: 0.875rem;
+            color: #1f2937;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background-color 0.15s ease;
+        }
+        .nav-more-menu a:hover {
+            background: #fef3c7;
+        }
+        .nav-more-menu a.active {
+            background: #fde68a;
+            color: #78350f;
+            font-weight: 600;
+        }
     </style>
     {% block head %}{% endblock %}
 </head>
@@ -37,7 +80,7 @@
             </a>
 
             <!-- Nav -->
-            <nav class="flex items-center justify-center gap-0.5 flex-1 overflow-x-auto py-1">
+            <nav class="flex items-center justify-center gap-0.5 flex-1 py-1">
                 <a href="/today"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     📅 <span class="hidden sm:inline">Today</span>
@@ -54,44 +97,20 @@
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     🎂 <span class="hidden sm:inline">Products</span>
                 </a>
-                <details class="nav-more relative">
+
+                <details class="nav-more">
                     <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
-                    <ul class="absolute right-0 mt-2 w-fit bg-base-100 rounded-lg shadow-lg z-50 py-1">
-                        <li>
-                            <a href="/reports"
-                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/reports' in request.url.path %}bg-amber-100{% endif %}">
-                                📊 Reports
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/dashboard"
-                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/dashboard' in request.url.path %}bg-amber-100{% endif %}">
-                                📈 Dashboard
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/export"
-                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/export' in request.url.path %}bg-amber-100{% endif %}">
-                                📥 Export
-                            </a>
-                        </li>
-                        <li>
-                            <a href="/settings"
-                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/settings' in request.url.path %}bg-amber-100{% endif %}">
-                                ⚙️ Settings
-                            </a>
-                        </li>
+                    <div class="nav-more-menu">
+                        <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">📊 Reports</a>
+                        <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">📈 Dashboard</a>
+                        <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">📥 Export</a>
+                        <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}">⚙️ Settings</a>
                         <!--
-                        <li>
-                            <a href="/audit"
-                            class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/audit' in request.url.path %}bg-amber-100{% endif %}">
-                                📜 Audit
-                            </a>
-                        </li>>
+                        <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}">📜 Audit</a>
                         -->
-                    </ul>
+                    </div>
                 </details>
             </nav>
 
