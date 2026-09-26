@@ -12,12 +12,14 @@
 <body class="min-h-screen bg-base-200">
 
     <!-- Top Navbar -->
-    <div class="navbar bg-gradient-to-r from-amber-50 to-orange-50 shadow-md sticky top-0 z-50 border-b border-amber-200">
-        <div class="container mx-auto px-4 flex items-center">
-            <a href="/today" class="flex items-center gap-2 mr-2">
+    <div class="navbar bg-gradient-to-r from-amber-50 to-orange-50 shadow-md sticky top-0 z-40 border-b border-amber-200">
+        <div class="container mx-auto px-2 sm:px-4 flex items-center">
+
+            <!-- Logo → /today -->
+            <a href="/today" class="flex items-center gap-2 mr-1 shrink-0">
                 <img src="/static/images/logo.png" alt="Logo"
                      class="h-9 w-9 rounded-full shadow-sm object-cover" />
-                <div class="hidden sm:block">
+                <div class="hidden lg:block">
                     <span class="text-lg font-extrabold bg-gradient-to-r from-amber-700 to-orange-600
                                  bg-clip-text text-transparent leading-tight block">
                         {{ settings.app_name }}
@@ -28,43 +30,62 @@
                 </div>
             </a>
 
+            <!-- Nav -->
             <nav class="flex items-center justify-center gap-0.5 flex-1 overflow-x-auto py-1">
                 <a href="/today"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     📅 <span class="hidden sm:inline">Today</span>
                 </a>
-                <a href="/dashboard"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/dashboard' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    📊 <span class="hidden sm:inline">Dashboard</span>
-                </a>
-                <a href="/products"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    🎂 <span class="hidden sm:inline">Products</span>
+                <a href="/orders"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/orders' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📋 <span class="hidden sm:inline">Orders</span>
                 </a>
                 <a href="/customers"
                    class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/customers' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
                     👥 <span class="hidden sm:inline">Customers</span>
                 </a>
-                <a href="/orders"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/orders' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    📋 <span class="hidden sm:inline">Orders</span>
+                <a href="/products"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    🎂 <span class="hidden sm:inline">Products</span>
                 </a>
-                <a href="/export"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/export' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    📥 <span class="hidden sm:inline">Export</span>
-                </a>
-                <a href="/reports"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/reports' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    📊 <span class="hidden sm:inline">Reports</span>
-                </a>
-                <!-- <a href="/audit"
-                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/audit' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
-                    📜 <span class="hidden sm:inline">Audit</span>
-                </a> -->
+
+                <details class="dropdown dropdown-end">
+                    <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
+                        ⋯ <span class="hidden sm:inline">More</span>
+                    </summary>
+                    <ul class="dropdown-content menu bg-base-100 rounded-box shadow-lg z-50 mt-2 w-44 p-2">
+                        <li>
+                            <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">
+                                📊 Reports
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">
+                                📈 Dashboard
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">
+                                📥 Export
+                            </a>
+                        </li>
+                        <li>
+                            <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}">
+                                ⚙️ Settings
+                            </a>
+                            <!--
+                            <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}">
+                                📜 Audit
+                            </a>
+                            -->
+                        </li>
+                    </ul>
+                </details>
             </nav>
 
-            <div class="flex-none flex items-center gap-2">
-                <div class="flex flex-col items-end leading-tight hidden md:flex">
+            <!-- Clock (desktop only) -->
+            <div class="flex-none hidden xl:flex items-center gap-2 ml-2">
+                <div class="flex flex-col items-end leading-tight">
                     <span id="nav-date" class="text-xs font-semibold text-amber-800"></span>
                     <span id="nav-time" class="text-xs text-amber-600 font-mono"></span>
                 </div>
@@ -77,9 +98,9 @@
         {% block content %}{% endblock %}
     </main>
 
-    <!-- Mobile FAB -->
+    <!-- Mobile FAB: Quick New Order -->
     <a href="/orders/new"
-       class="btn btn-circle btn-primary fixed bottom-6 right-6 z-50 shadow-lg md:hidden">
+       class="btn btn-circle btn-primary fixed bottom-6 right-6 z-30 shadow-lg md:hidden">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -112,13 +133,14 @@
         root.appendChild(el);
         setTimeout(() => el.remove(), 3500);
     }
-    // Global HTMX error handling — surface server errors as toasts.
+
+    // Global HTMX error handling
     document.body.addEventListener('htmx:responseError', function (evt) {
         let msg = 'Request failed';
         try {
             const detail = JSON.parse(evt.detail.xhr.responseText).detail;
             if (detail) msg = detail;
-        } catch (e) { /* not JSON, use default */ }
+        } catch (e) { /* not JSON */ }
         if (typeof toast === 'function') toast(msg, 'error');
     });
     document.body.addEventListener('htmx:sendError', function () {
