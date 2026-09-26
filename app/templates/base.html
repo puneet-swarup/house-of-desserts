@@ -7,6 +7,12 @@
     <link rel="icon" type="image/png" href="/static/images/logo.png" />
     <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
     <script src="/static/js/htmx.min.js"></script>
+    <script src="/static/js/htmx.min.js"></script>
+    <style>
+        .nav-more > summary { list-style: none; cursor: pointer; }
+        .nav-more > summary::-webkit-details-marker { display: none; }
+        .nav-more > summary::marker { content: ""; }
+    </style>
     {% block head %}{% endblock %}
 </head>
 <body class="min-h-screen bg-base-200">
@@ -49,36 +55,62 @@
                     🎂 <span class="hidden sm:inline">Products</span>
                 </a>
 
-                <details class="dropdown dropdown-end">
+                            <!-- Nav -->
+            <nav class="flex items-center justify-center gap-0.5 flex-1 py-1">
+                <a href="/today"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/today' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📅 <span class="hidden sm:inline">Today</span>
+                </a>
+                <a href="/orders"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/orders' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    📋 <span class="hidden sm:inline">Orders</span>
+                </a>
+                <a href="/customers"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/customers' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    👥 <span class="hidden sm:inline">Customers</span>
+                </a>
+                <a href="/products"
+                   class="btn btn-sm btn-ghost font-semibold whitespace-nowrap {% if '/products' in request.url.path %}btn-active bg-amber-100 text-amber-900{% endif %}">
+                    🎂 <span class="hidden sm:inline">Products</span>
+                </a>
+
+                <details class="nav-more relative">
                     <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
-                    <ul class="dropdown-content menu bg-base-100 rounded-lg shadow-lg z-50 mt-2 w-48 p-2">
+                    <ul class="absolute right-0 mt-2 w-fit bg-base-100 rounded-lg shadow-lg z-50 py-1">
                         <li>
-                            <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">
+                            <a href="/reports"
+                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/reports' in request.url.path %}bg-amber-100{% endif %}">
                                 📊 Reports
                             </a>
                         </li>
                         <li>
-                            <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">
+                            <a href="/dashboard"
+                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/dashboard' in request.url.path %}bg-amber-100{% endif %}">
                                 📈 Dashboard
                             </a>
                         </li>
                         <li>
-                            <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">
+                            <a href="/export"
+                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/export' in request.url.path %}bg-amber-100{% endif %}">
                                 📥 Export
                             </a>
                         </li>
                         <li>
-                            <a href="/settings" class="{% if '/settings' in request.url.path %}active{% endif %}">
+                            <a href="/settings"
+                               class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/settings' in request.url.path %}bg-amber-100{% endif %}">
                                 ⚙️ Settings
                             </a>
-                            <!--
-                            <a href="/audit" class="{% if '/audit' in request.url.path %}active{% endif %}">
+                        </li>
+                        <!--
+                        <li>
+                            <a href="/audit"
+                            class="block px-4 py-2 whitespace-nowrap hover:bg-amber-50 {% if '/audit' in request.url.path %}bg-amber-100{% endif %}">
                                 📜 Audit
                             </a>
-                            -->
-                        </li>
+                        </li>>
+                        -->
                     </ul>
                 </details>
             </nav>
