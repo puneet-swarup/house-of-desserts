@@ -163,3 +163,49 @@ Never write inline `style=""` for layout. If a class isn't compiled, the
 fix is to rebuild, not to inline.
 
 Template edits + `build-css.ps1` + commit are always one operation.
+
+## Auto-deduction on production start
+
+**Entering IN_PROGRESS deducts ingredients per recipe.**
+
+Not on order creation (nothing is committed yet) and not on READY
+(too late — the ingredients are gone the moment baking starts).
+
+Stock is allowed to go negative. The UI shows a shortage warning before
+the user starts production, but does not block. A home bakery knows its
+kitchen better than the app.
+
+## Cancel semantics
+
+| From status | Behavior |
+|---|---|
+| INQUIRY / CONFIRMED | No consumption happened. Clean cancel. |
+| IN_PROGRESS | User chooses: **return stock** (creates RETURN movements per consumption) or **waste** (consumption stands). |
+| READY | Cancel allowed, but no salvage option. The food was already made; consumption costs stand as a loss. |
+| DELIVERED | Not cancellable. A refund or refused delivery is a different concept. |
+
+Every cancel is audited with the `salvage` flag recorded in the audit entry.
+
+## COGS
+
+**Per-order COGS = sum of `total_cost_at_time` on CONSUMPTION movements
+referencing that order, minus the same for RETURN movements.**
+
+`total_cost_at_time` is a magnitude (always positive), captured at the
+moment of the movement. It never changes if ingredient prices move later.
+`order_cogs()` is the single function that computes this; reports and the
+order detail page both use it.
+
+## Recipe quantities and units
+
+Recipe lines are always stored in the ingredient's own unit. If the user
+enters "500 g" for a kg-based ingredient, the service converts to "0.5 kg"
+before saving.
+
+**Unit conversion is only within a group:**
+- Mass: g ↔ kg
+- Volume: ml ↔ l
+- Count: `pcs` and `packets` are each their own group
+
+There is no implicit `packets → pcs` conversion. That's a product-specific
+fact, not a unit fact.
