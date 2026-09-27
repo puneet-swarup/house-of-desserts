@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ settings.app_name }}{% endblock %}</title>
-        <link rel="icon" type="image/png" href="/static/images/logo.png" />
+    <link rel="icon" type="image/png" href="/static/images/logo.png" />
 
     <!-- PWA -->
     <link rel="manifest" href="/static/manifest.json" />
@@ -16,7 +16,6 @@
     <meta name="apple-mobile-web-app-title" content="HOD" />
 
     <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
-    <script src="/static/js/htmx.min.js"></script>
     <script src="/static/js/htmx.min.js"></script>
     <style>
         /* Nav dropdown — self-contained, no Tailwind/daisyUI dependency */
@@ -108,7 +107,7 @@
                     🎂 <span class="hidden sm:inline">Products</span>
                 </a>
 
-                <details class="nav-more">
+                <details class="nav-more" id="nav-more">
                     <summary class="btn btn-sm btn-ghost font-semibold whitespace-nowrap">
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
@@ -189,13 +188,6 @@
         if (typeof toast === 'function') toast('Network error', 'error');
     });
 
-    // Close open nav dropdown when clicking outside
-    document.addEventListener('click', function (e) {
-        document.querySelectorAll('details.dropdown[open]').forEach(function (d) {
-            if (!d.contains(e.target)) d.removeAttribute('open');
-        });
-    });
-
     // Register the service worker (required for Android install prompt).
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
@@ -204,6 +196,36 @@
             });
         });
     }
+
+    // Close the More dropdown on click-outside or Escape.
+    // Uses pointerdown so the toggle click that opens the menu
+    // doesn't race with the close handler.
+    (function () {
+        const menu = document.getElementById('nav-more');
+        if (!menu) return;
+
+        document.addEventListener('pointerdown', function (e) {
+            if (!menu.open) return;
+            if (menu.contains(e.target)) return;
+            menu.removeAttribute('open');
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && menu.open) {
+                menu.removeAttribute('open');
+                const summary = menu.querySelector('summary');
+                if (summary) summary.focus();
+            }
+        });
+
+        // Close after picking an item (nav happens anyway, but this keeps
+        // the menu from lingering if a same-page anchor is clicked)
+        menu.querySelectorAll('.nav-more-menu a').forEach(function (a) {
+            a.addEventListener('click', function () {
+                menu.removeAttribute('open');
+            });
+        });
+    })();
     </script>
 
     {% block modals %}{% endblock %}
