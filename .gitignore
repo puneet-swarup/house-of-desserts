@@ -76,3 +76,8 @@ reports/
 
 # Alembic
 alembic/__pycache__/
+# Alembic
+alembic/__pycache__/
+
+# Old backups
+tests.backup/
