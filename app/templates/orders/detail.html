@@ -179,7 +179,7 @@
             <div class="card-body">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Money</h2>
 
-                <div class="space-y-1 text-sm max-w-xs">
+                                <div class="space-y-1 text-sm max-w-xs">
                     <div class="flex justify-between">
                         <span class="text-base-content/60">Total</span>
                         <span class="font-semibold">{{ order.total_amount|money }}</span>
@@ -194,6 +194,25 @@
                             {{ order.balance_due|money }}
                         </span>
                     </div>
+
+                    {% if cogs > 0 %}
+                    <div class="border-t border-base-200 mt-2 pt-2 space-y-1">
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Ingredient cost</span>
+                            <span>{{ cogs|money }}</span>
+                        </div>
+                        {% set margin = order.total_amount - cogs %}
+                        <div class="flex justify-between">
+                            <span class="text-base-content/60">Gross margin</span>
+                            <span class="font-semibold {% if margin > 0 %}text-success{% else %}text-error{% endif %}">
+                                {{ margin|money }}
+                            </span>
+                        </div>
+                        <p class="text-xs text-base-content/40 pt-1">
+                            Cost captured at production time. Doesn't change if prices move later.
+                        </p>
+                    </div>
+                    {% endif %}
                 </div>
 
                 {% if order.balance_due > 0 and order.status.value != "CANCELLED" %}

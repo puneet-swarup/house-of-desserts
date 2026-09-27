@@ -1,4 +1,4 @@
-"""Today page — dispatch list and production needs."""
+"""Today page — dispatch list, production needs, low-stock alerts."""
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
@@ -18,9 +18,9 @@ def today_page(request: Request, db: Session = Depends(get_db)):
 
     dispatch = today_service.dispatch_today(db)
     production = today_service.production_this_week(db)
+    low_stock = today_service.low_stock_ingredients(db)
 
     # Attach a single quick-action WhatsApp link per order.
-    # Pick "ready" as the default message — the most common one-tap action.
     for order in dispatch:
         messages = messages_for_order(order)
         ready = next((m for m in messages if m["key"] == "ready"), None)
@@ -33,5 +33,6 @@ def today_page(request: Request, db: Session = Depends(get_db)):
             "settings": settings,
             "dispatch": dispatch,
             "production": production,
+            "low_stock": low_stock,
         },
     )

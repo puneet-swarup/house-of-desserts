@@ -1,36 +1,34 @@
 """
-Today page business logic — dispatch list and production list.
+Today page business logic — dispatch list, production list, low-stock alerts.
 
 Design note: fulfillment_date is stored as a naive datetime that
 represents the customer's local (business timezone) intent — they
 typed "15:00" meaning 3pm local. We therefore filter by comparing
 the DATE portion of that naive value against the current date in
-the business timezone. Comparing against UTC bounds was wrong and
-produced off-by-hours bugs on non-local servers (CI).
+the business timezone.
 """
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import get_settings
-from app.models import Order, OrderItem, OrderStatus, Product
+from app.models import Ingredient, Order, OrderItem, OrderStatus, Product
+from app.services import inventory_service
 
 
-def _today_local() -> datetime.date:
+def _today_local() -> date:
     settings = get_settings()
     tz = ZoneInfo(settings.business_timezone)
     return datetime.now(tz).date()
 
 
 def dispatch_today(db: Session) -> list[Order]:
-    """
-    Orders fulfilling today (business timezone), sorted by fulfillment time.
-    """
     today = _today_local()
 
     orders = (
@@ -48,17 +46,6 @@ def dispatch_today(db: Session) -> list[Order]:
 
 
 def production_this_week(db: Session, days: int = 7) -> dict:
-    """
-    Aggregate production needs for unfulfilled orders in the next N days.
-
-    Buckets:
-      urgent   — fulfilling today
-      tomorrow — fulfilling tomorrow
-      later    — fulfilling within the horizon but after tomorrow
-
-    Orders with status CANCELLED, READY, DELIVERED, or PAID are excluded —
-    they're done or irrelevant to baking.
-    """
     today = _today_local()
     tomorrow = today + timedelta(days=1)
     horizon = today + timedelta(days=days)
@@ -71,7 +58,6 @@ def production_this_week(db: Session, days: int = 7) -> dict:
         .order_by(Order.fulfillment_date.asc())
     ).all()
 
-    # key = (bucket_name, product_id)
     agg: dict[tuple[str, int], dict] = {}
     order_ids_per_key: dict[tuple[str, int], set[int]] = {}
 
@@ -126,3 +112,38 @@ def production_this_week(db: Session, days: int = 7) -> dict:
         "later": later,
         "total_units": sum(r["qty"] for r in urgent + tomorrow_rows + later),
     }
+
+
+def low_stock_ingredients(db: Session) -> list[dict]:
+    """
+    Active ingredients whose on-hand stock is at or below the reorder
+    threshold. Sorted by shortfall descending — the biggest gaps first.
+    """
+    ings = (
+        db.execute(
+            select(Ingredient).where(Ingredient.is_active.is_(True)).order_by(Ingredient.name)
+        )
+        .scalars()
+        .all()
+    )
+
+    if not ings:
+        return []
+
+    stocks = inventory_service.stocks_for(db, [i.id for i in ings])
+
+    out: list[dict] = []
+    for ing in ings:
+        on_hand = stocks.get(ing.id, Decimal("0"))
+        if on_hand <= ing.reorder_threshold:
+            out.append(
+                {
+                    "ingredient": ing,
+                    "on_hand": on_hand,
+                    "threshold": ing.reorder_threshold,
+                    "shortfall": ing.reorder_threshold - on_hand,
+                }
+            )
+
+    out.sort(key=lambda r: r["shortfall"], reverse=True)
+    return out

@@ -257,6 +257,9 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
     if order.status.value == "CONFIRMED":
         shortages = order_service.check_production_shortages(db, order_id)
 
+    # COGS is zero for orders that never reached IN_PROGRESS.
+    cogs = order_service.order_cogs(db, order_id)
+
     return templates.TemplateResponse(
         request=request,
         name="orders/detail.html",
@@ -265,6 +268,7 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
             "order": order,
             "whatsapp_messages": whatsapp_messages,
             "shortages": shortages,
+            "cogs": cogs,
         },
     )
 

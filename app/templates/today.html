@@ -12,7 +12,44 @@
         <a href="/orders/new" class="btn btn-amber btn-sm font-semibold">+ New Order</a>
     </div>
 
-    <!-- ============ DISPATCH ============ -->
+    {% if low_stock %}
+    <div class="card bg-base-100 shadow-sm border-l-4 border-warning">
+        <div class="card-body space-y-2">
+            <div class="flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-warning uppercase">⚠️ Low stock</h2>
+                <a href="/ingredients" class="btn btn-ghost btn-xs">Manage inventory</a>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-base-content/60">
+                            <th>Ingredient</th>
+                            <th class="text-right">On hand</th>
+                            <th class="text-right">Threshold</th>
+                            <th class="text-right">Short by</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in low_stock %}
+                        <tr class="hover">
+                            <td>
+                                <a href="/ingredients/{{ row.ingredient.id }}" class="font-medium hover:underline">
+                                    {{ row.ingredient.name }}
+                                </a>
+                            </td>
+                            <td class="text-right font-mono text-sm">{{ row.on_hand }} {{ row.ingredient.unit }}</td>
+                            <td class="text-right font-mono text-sm text-base-content/60">{{ row.threshold }} {{ row.ingredient.unit }}</td>
+                            <td class="text-right font-mono text-sm text-error font-semibold">{{ row.shortfall }} {{ row.ingredient.unit }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- DISPATCH -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-3">
             <div class="flex justify-between items-center">
@@ -102,6 +139,8 @@
                                             {{ next_status.replace('_', ' ') }}
                                         </button>
                                     </form>
+                                    {% else %}
+                                    <span class="text-xs text-base-content/40">—</span>
                                     {% endif %}
                                 </div>
                             </td>
@@ -116,7 +155,7 @@
         </div>
     </div>
 
-    <!-- ============ PRODUCTION ============ -->
+    <!-- PRODUCTION -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <div class="flex justify-between items-center">
