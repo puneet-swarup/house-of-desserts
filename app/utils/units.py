@@ -72,7 +72,7 @@ def convert(qty: Decimal, from_unit: str | None, to_unit: str | None) -> Decimal
     if not are_compatible(f, t):
         raise HTTPException(
             status_code=400,
-            detail=(f"Cannot convert '{from_unit}' to '{to_unit}' — " "different unit groups"),
+            detail=(f"Cannot convert '{from_unit}' to '{to_unit}' — different unit groups"),
         )
     return qty * _TO_BASE[f] / _TO_BASE[t]
 
