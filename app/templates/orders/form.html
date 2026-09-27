@@ -12,6 +12,12 @@
         <a href="{{ '/orders/' ~ order.id if is_edit else '/orders' }}" class="btn btn-ghost btn-sm">← Back</a>
     </div>
 
+    {% if not is_edit and source_order_number %}
+    <div class="alert alert-info">
+        <span>Repeating items from <strong>{{ source_order_number }}</strong>. Adjust anything, then save.</span>
+    </div>
+    {% endif %}
+
     {% if is_edit and has_invoice %}
     <div class="alert alert-warning text-sm">
         <span>An invoice has already been issued for this order. Edits here will <strong>not</strong> change that invoice.</span>
@@ -24,7 +30,6 @@
 
     <form method="post" action="{{ form_action }}" id="order-form" class="space-y-4">
 
-        <!-- Customer -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer</h2>
@@ -42,10 +47,11 @@
                         <select name="customer_id" id="customer_id" class="select select-bordered w-full sm:flex-1 sm:min-w-0" required>
                             <option value="">Select a customer…</option>
                             {% for c in customers %}
+                            {% set selected_id = (form_data.customer_id if form_data and form_data.customer_id else preset_customer_id) %}
                             <option value="{{ c.id }}"
                                     data-default-address="{{ c.default_address_line }}"
                                     data-delivery-type="{{ 'DELIVERY' if c.default_address_line else 'PICKUP' }}"
-                                    {% if form_data and form_data.customer_id == c.id %}selected{% endif %}>
+                                    {% if selected_id and c.id == selected_id %}selected{% endif %}>
                                 {{ c.name }} — {{ c.phone }}
                             </option>
                             {% endfor %}
@@ -59,7 +65,6 @@
             </div>
         </div>
 
-        <!-- Fulfillment -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Fulfillment</h2>
@@ -107,7 +112,6 @@
             </div>
         </div>
 
-        <!-- Items -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>
@@ -115,6 +119,31 @@
                 <div id="items" class="space-y-2">
                     {% if is_edit %}
                         {% for item in order.items %}
+                        <div class="item-row grid grid-cols-12 gap-2 items-end">
+                            <div class="col-span-7 form-control">
+                                <label class="label"><span class="label-text font-semibold">Product</span></label>
+                                <select name="product_id" class="select select-bordered select-sm w-full" required>
+                                    <option value="">Select…</option>
+                                    {% for p in products %}
+                                    <option value="{{ p.id }}" {% if p.id == item.product_id %}selected{% endif %}>
+                                        {{ p.name }}{% if p.measure_display %} · {{ p.measure_display }}{% endif %}{% if p.pack_display %} · {{ p.pack_display }}{% endif %} — {{ p.base_price|money }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-span-3 form-control">
+                                <label class="label"><span class="label-text font-semibold">Qty</span></label>
+                                <input type="number" min="1" value="{{ item.quantity }}" name="quantity"
+                                       class="input input-bordered input-sm w-full" required />
+                            </div>
+                            <div class="col-span-2">
+                                <button type="button" class="btn btn-ghost btn-sm w-full"
+                                        onclick="this.closest('.item-row').remove()">Remove</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% elif preset_items %}
+                        {% for item in preset_items %}
                         <div class="item-row grid grid-cols-12 gap-2 items-end">
                             <div class="col-span-7 form-control">
                                 <label class="label"><span class="label-text font-semibold">Product</span></label>
@@ -170,7 +199,6 @@
             </div>
         </div>
 
-        <!-- Advance (create only) -->
         {% if not is_edit %}
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
@@ -196,7 +224,6 @@
         </div>
         {% endif %}
 
-        <!-- Notes -->
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body space-y-3">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Notes</h2>

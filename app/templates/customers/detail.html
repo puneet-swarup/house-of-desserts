@@ -7,6 +7,7 @@
     <div class="flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-2xl font-extrabold text-amber-900">{{ customer.name }}</h1>
         <div class="flex gap-2 flex-wrap">
+            <a href="/orders/new?from_order_id=0" class="hidden">.</a>
             <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
             <button type="button" class="btn btn-outline btn-sm btn-error"
                     onclick="softDelete({{ customer.id }})">
@@ -16,7 +17,6 @@
         </div>
     </div>
 
-    <!-- Stats -->
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div class="card bg-base-100 shadow-sm">
             <div class="card-body p-4">
@@ -63,7 +63,6 @@
         </div>
     </div>
 
-    <!-- Customer Details (read-only) -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <h2 class="text-sm font-semibold text-base-content/50 uppercase">Customer Details</h2>
@@ -95,7 +94,6 @@
         </div>
     </div>
 
-    <!-- Addresses (read-only) -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <h2 class="text-sm font-semibold text-base-content/50 uppercase">Addresses</h2>
@@ -130,10 +128,12 @@
         </div>
     </div>
 
-    <!-- Order History -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
-            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Order History</h2>
+            <div class="flex justify-between items-center">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Order History</h2>
+                <a href="/orders/new" class="btn btn-amber btn-xs font-semibold">+ New Order</a>
+            </div>
 
             {% if customer.orders %}
             <div class="overflow-x-auto">
@@ -145,6 +145,7 @@
                             <th>Status</th>
                             <th class="text-right">Amount</th>
                             <th class="text-right">Balance</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -167,6 +168,15 @@
                                     <span class="text-error font-semibold">{{ order.balance_due|money }}</span>
                                 {% else %}
                                     <span class="text-success">Paid</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if order.status.value != 'CANCELLED' %}
+                                <a href="/orders/new?from_order_id={{ order.id }}"
+                                   class="btn btn-outline btn-xs whitespace-nowrap"
+                                   title="Start a new order with the same items">
+                                    Repeat
+                                </a>
                                 {% endif %}
                             </td>
                         </tr>

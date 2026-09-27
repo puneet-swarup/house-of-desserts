@@ -4,7 +4,7 @@ Order routes. HTTP only; business logic in order_service.
 
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
@@ -76,10 +76,39 @@ def list_orders_page(
 
 
 @router.get("/new", response_class=HTMLResponse)
-def new_order_form(request: Request, db: Session = Depends(get_db)):
+def new_order_form(
+    request: Request,
+    from_order_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """
+    New order form. If `from_order_id` is provided, pre-fills the customer
+    and item lines from that order — the "repeat order" flow.
+    """
     templates = request.app.state.templates
     settings = request.app.state.settings
     customers, products = _product_and_customer_choices(db)
+
+    preset_customer_id: int | None = None
+    preset_items: list[dict] = []
+    source_order_number: str | None = None
+
+    if from_order_id is not None:
+        try:
+            src = order_service.get_order(db, from_order_id)
+        except HTTPException:
+            src = None
+        if src and src.status != OrderStatus.CANCELLED:
+            preset_customer_id = src.customer_id
+            source_order_number = src.order_number
+            for it in src.items:
+                preset_items.append(
+                    {
+                        "product_id": it.product_id,
+                        "quantity": it.quantity,
+                        "customization_notes": it.customization_notes or "",
+                    }
+                )
 
     return templates.TemplateResponse(
         request=request,
@@ -92,6 +121,9 @@ def new_order_form(request: Request, db: Session = Depends(get_db)):
             "default_fulfillment": _default_fulfillment(),
             "mode": "create",
             "form_action": "/orders/",
+            "preset_customer_id": preset_customer_id,
+            "preset_items": preset_items,
+            "source_order_number": source_order_number,
         },
     )
 
