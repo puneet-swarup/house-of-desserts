@@ -1,9 +1,10 @@
 """
-Alembic environment configuration.
+Alembic environment.
 
-This file tells Alembic:
-1. Which database to connect to (from our app's .env config)
-2. Which models to inspect when autogenerating migrations
+Reads DB_URL from app.config.Settings so there's a single source of
+truth for the database location. SQLite needs `render_as_batch=True`
+to support ALTER (SQLite doesn't support ALTER COLUMN natively;
+alembic rewrites the table behind the scenes).
 """
 
 from logging.config import fileConfig
@@ -12,57 +13,40 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
-# Import our settings to get the DB URL
+# Importing the models package registers every table with Base.metadata,
+# which is what autogenerate compares against the live DB.
+from app import models  # noqa: F401
 from app.config import get_settings
-
-# Import our Base (the "parent" of all our ORM models)
 from app.database import Base
 
-# Import ALL models so Alembic can see every table definition.
-# Without these imports, autogenerate won't detect your tables.
-from app.models import (  # noqa: F401
-    Address,
-    AuditLog,
-    Customer,
-    Invoice,
-    Order,
-    OrderItem,
-    Payment,
-    Product,
-)
-
-settings = get_settings()
-
-# Alembic Config object (access to values in alembic.ini)
 config = context.config
 
-# Override the empty sqlalchemy.url with our actual DB path
+# Single source of truth for the DB URL
+settings = get_settings()
 config.set_main_option("sqlalchemy.url", settings.db_url)
 
-# Set up Python logging from the ini file
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# This is what Alembic inspects for autogenerate
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Generate SQL script without a live DB connection."""
+    """Emit SQL to stdout without connecting to a DB."""
     url = config.get_main_option("sqlalchemy.url")
     context.configure(
         url=url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        compare_type=True,
+        render_as_batch=True,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def run_migrations_online() -> None:
-    """Run migrations against the actual database."""
+    """Run migrations using a live connection."""
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -72,7 +56,7 @@ def run_migrations_online() -> None:
         context.configure(
             connection=connection,
             target_metadata=target_metadata,
-            compare_type=True,
+            render_as_batch=True,
         )
         with context.begin_transaction():
             context.run_migrations()

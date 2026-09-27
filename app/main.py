@@ -27,6 +27,9 @@ async def lifespan(app: FastAPI):
 
     from app import models  # noqa: F401
 
+    # create_all is kept as a safety net for fresh clones before
+    # `alembic upgrade head` has been run. It creates missing tables
+    # but does NOT alter existing ones — Alembic handles those.
     Base.metadata.create_all(engine)
 
     yield

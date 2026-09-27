@@ -73,3 +73,6 @@ data/test_ui.db-shm
 
 backups/
 reports/
+
+# Alembic
+alembic/__pycache__/
