@@ -1,14 +1,19 @@
-"""Product CRUD routes."""
+"""Product CRUD routes + recipe editor."""
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import product_service
+from app.services import inventory_service, product_service, recipe_service
 from app.utils.sku import validate_sku_format
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------
+# List
+# ---------------------------------------------------------------
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -16,11 +21,24 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
     products = product_service.list_products(db, include_inactive=True)
+
+    # Batch capacity — one query, no N+1
+    capacities = recipe_service.capacity_for_products(db, [p.id for p in products])
+
     return templates.TemplateResponse(
         request=request,
         name="products/list.html",
-        context={"settings": settings, "products": products},
+        context={
+            "settings": settings,
+            "products": products,
+            "capacities": capacities,
+        },
     )
+
+
+# ---------------------------------------------------------------
+# Create
+# ---------------------------------------------------------------
 
 
 @router.get("/new", response_class=HTMLResponse)
@@ -40,19 +58,13 @@ def check_sku(
     exclude_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    """
-    Live SKU uniqueness check for the product form.
-    Returns {available: bool, normalized: str, reason: str|None}
-    """
     if not sku.strip():
         return {"available": True, "normalized": "", "reason": None}
     try:
         normalized = validate_sku_format(sku)
     except ValueError:
         return {"available": False, "normalized": "", "reason": "invalid"}
-    available = product_service.is_sku_available(
-        db, normalized, exclude_product_id=exclude_id
-    )
+    available = product_service.is_sku_available(db, normalized, exclude_product_id=exclude_id)
     return {
         "available": available,
         "normalized": normalized,
@@ -96,20 +108,21 @@ def create_product(
     }
 
     try:
-        product_service.create_product(db, data)
+        product = product_service.create_product(db, data)
     except Exception as e:
         return templates.TemplateResponse(
             request=request,
             name="products/form.html",
-            context={
-                "settings": settings,
-                "product": None,
-                "error": str(e),
-                "form_data": data,
-            },
+            context={"settings": settings, "product": None, "error": str(e), "form_data": data},
             status_code=400,
         )
-    return RedirectResponse(url="/products", status_code=303)
+
+    return RedirectResponse(url=f"/products/{product.id}/recipe", status_code=303)
+
+
+# ---------------------------------------------------------------
+# Edit / Delete
+# ---------------------------------------------------------------
 
 
 @router.get("/{product_id}/edit", response_class=HTMLResponse)
@@ -167,14 +180,10 @@ def update_product(
         return templates.TemplateResponse(
             request=request,
             name="products/form.html",
-            context={
-                "settings": settings,
-                "product": product,
-                "error": str(e),
-                "form_data": data,
-            },
+            context={"settings": settings, "product": product, "error": str(e), "form_data": data},
             status_code=400,
         )
+
     return RedirectResponse(url="/products", status_code=303)
 
 
@@ -182,3 +191,87 @@ def update_product(
 def delete_product_route(product_id: int, db: Session = Depends(get_db)):
     product_service.delete_product(db, product_id)
     return JSONResponse({"ok": True})
+
+
+# ---------------------------------------------------------------
+# Recipe editor
+# ---------------------------------------------------------------
+
+
+@router.get("/{product_id}/recipe", response_class=HTMLResponse)
+def recipe_editor(
+    request: Request,
+    product_id: int,
+    saved: str = "",
+    error: str = "",
+    db: Session = Depends(get_db),
+):
+    templates = request.app.state.templates
+    settings = request.app.state.settings
+
+    product = product_service.get_product(db, product_id)
+    recipe_lines = recipe_service.list_recipe(db, product_id)
+    capacity = recipe_service.capacity_for_product(db, product_id)
+    recipe_cost = recipe_service.recipe_cost(db, product_id)
+    ingredients = inventory_service.list_ingredients(db, include_inactive=False)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="products/recipe.html",
+        context={
+            "settings": settings,
+            "product": product,
+            "recipe_lines": recipe_lines,
+            "capacity": capacity,
+            "recipe_cost": recipe_cost,
+            "ingredients": ingredients,
+            "saved": saved,
+            "error": error,
+        },
+    )
+
+
+@router.post("/{product_id}/recipe", response_class=HTMLResponse)
+async def recipe_save(request: Request, product_id: int, db: Session = Depends(get_db)):
+    form = await request.form()
+    ing_ids = form.getlist("ingredient_id")
+    quantities = form.getlist("quantity")
+    unit_rows = form.getlist("unit")
+
+    lines: list[dict] = []
+    for idx, (iid_raw, qty_raw) in enumerate(zip(ing_ids, quantities, strict=False)):
+        iid = (iid_raw or "").strip()
+        qty = (qty_raw or "").strip()
+        if not iid or not qty:
+            continue
+        unit = ""
+        if idx < len(unit_rows):
+            unit = (unit_rows[idx] or "").strip()
+        try:
+            lines.append(
+                {
+                    "ingredient_id": int(iid),
+                    "quantity_per_unit": qty,
+                    "unit": unit or None,
+                }
+            )
+        except (ValueError, TypeError):
+            return RedirectResponse(
+                url=f"/products/{product_id}/recipe?error=Invalid+row",
+                status_code=303,
+            )
+
+    try:
+        recipe_service.replace_recipe(db, product_id, lines)
+    except Exception as exc:
+        from urllib.parse import quote
+
+        return RedirectResponse(
+            url=f"/products/{product_id}/recipe?error={quote(str(exc))}",
+            status_code=303,
+        )
+
+    return RedirectResponse(
+        url=f"/products/{product_id}/recipe?saved=1",
+        status_code=303,
+    )

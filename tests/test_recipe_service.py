@@ -247,3 +247,45 @@ def test_replace_recipe_empty_clears(db):
 
     rs.replace_recipe(db, p.id, [])
     assert rs.list_recipe(db, p.id) == []
+
+    def test_recipe_line_converts_g_to_kg(db):
+        """Ingredient in kg, recipe entered in g — converted on save."""
+        p = _product(db)
+        # Ingredient stored in kg
+        ing = inv.create_ingredient(
+            db,
+            {
+                "name": "Flour (kg)",
+                "unit": "kg",
+                "kind": "RAW",
+                "reorder_threshold": Decimal("0"),
+            },
+        )
+
+        line = rs.upsert_recipe_line(db, p.id, ing.id, Decimal("500"), from_unit="g")
+        # 500 g stored as 0.5 kg
+        assert line.quantity_per_unit == Decimal("0.5")
+
+    def test_capacity_after_conversion(db):
+        """Stock 5 kg, recipe 500 g → capacity 10."""
+        p = _product(db)
+        ing = inv.create_ingredient(
+            db,
+            {
+                "name": "Bulk Flour",
+                "unit": "kg",
+                "kind": "RAW",
+                "reorder_threshold": Decimal("0"),
+            },
+        )
+        inv.record_movement(
+            db,
+            ing.id,
+            delta=Decimal("5"),
+            reason="PURCHASE",
+            unit_cost=Decimal("50"),
+        )
+        rs.upsert_recipe_line(db, p.id, ing.id, Decimal("500"), from_unit="g")
+
+        cap = rs.capacity_for_product(db, p.id)
+        assert cap["capacity"] == 10

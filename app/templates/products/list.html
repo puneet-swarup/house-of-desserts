@@ -20,24 +20,40 @@
                         <th>SKU</th>
                         <th>Name</th>
                         <th>Category</th>
-                        <th>Measure</th>
-                        <th>Pack</th>
+                        <th>Size</th>
                         <th class="text-right">Price</th>
-                        <th class="text-right">GST</th>
+                        <th class="text-center">Can make</th>
                         <th>Status</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for product in products %}
+                    {% set cap = capacities.get(product.id) %}
                     <tr class="hover {% if not product.is_active %}opacity-50{% endif %}">
                         <td class="font-mono text-xs">{{ product.sku }}</td>
                         <td class="font-semibold">{{ product.name }}</td>
                         <td><span class="badge badge-outline badge-sm">{{ product.category }}</span></td>
-                        <td class="text-sm">{{ product.measure_display or '—' }}</td>
-                        <td class="text-sm">{{ product.pack_display or '—' }}</td>
+                        <td class="text-sm">
+                            {{ product.measure_display or '' }}{% if product.measure_display and product.pack_display %} · {% endif %}{{ product.pack_display or '' }}{% if not product.measure_display and not product.pack_display %}—{% endif %}
+                        </td>
                         <td class="text-right font-medium">{{ product.base_price|money }}</td>
-                        <td class="text-right text-sm">{{ product.gst_rate }}%</td>
+                        <td class="text-center">
+                            {% if cap and cap.has_recipe %}
+                                {% if cap.capacity == 0 %}
+                                    <span class="badge badge-error badge-sm">{{ cap.capacity }}</span>
+                                {% elif cap.capacity <= 5 %}
+                                    <span class="badge badge-warning badge-sm">{{ cap.capacity }}</span>
+                                {% else %}
+                                    <span class="badge badge-success badge-sm">{{ cap.capacity }}</span>
+                                {% endif %}
+                            {% else %}
+                                <a href="/products/{{ product.id }}/recipe"
+                                   class="text-xs text-base-content/40 hover:underline whitespace-nowrap">
+                                    set recipe
+                                </a>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if product.is_active %}
                                 <span class="badge badge-success badge-sm">Active</span>
@@ -47,6 +63,7 @@
                         </td>
                         <td>
                             <div class="flex gap-1 justify-end">
+                                <a href="/products/{{ product.id }}/recipe" class="btn btn-outline btn-xs">Recipe</a>
                                 <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
                                 {% if product.is_active %}
                                 <button type="button" class="btn btn-outline btn-xs btn-error"
@@ -68,6 +85,7 @@
     <!-- Mobile: cards -->
     <div class="md:hidden space-y-3">
         {% for product in products %}
+        {% set cap = capacities.get(product.id) %}
         <div class="card bg-base-100 shadow-sm {% if not product.is_active %}opacity-60{% endif %}">
             <div class="card-body p-4 space-y-2">
                 <div class="flex justify-between items-start">
@@ -86,12 +104,23 @@
                     <span class="badge badge-outline badge-sm">{{ product.category }}</span>
                     {% if product.measure_display %}<span class="badge badge-ghost badge-sm">{{ product.measure_display }}</span>{% endif %}
                     {% if product.pack_display %}<span class="badge badge-ghost badge-sm">{{ product.pack_display }}</span>{% endif %}
-                    <span class="badge badge-ghost badge-sm">GST {{ product.gst_rate }}%</span>
+                    {% if cap and cap.has_recipe %}
+                        {% if cap.capacity == 0 %}
+                            <span class="badge badge-error badge-sm">Can make 0</span>
+                        {% elif cap.capacity <= 5 %}
+                            <span class="badge badge-warning badge-sm">Can make {{ cap.capacity }}</span>
+                        {% else %}
+                            <span class="badge badge-success badge-sm">Can make {{ cap.capacity }}</span>
+                        {% endif %}
+                    {% elif cap and not cap.has_recipe %}
+                        <span class="badge badge-ghost badge-sm">No recipe</span>
+                    {% endif %}
                 </div>
 
                 <div class="flex justify-between items-center pt-2 border-t border-base-200">
                     <span class="text-lg font-bold">{{ product.base_price|money }}</span>
-                    <div class="flex gap-2">
+                    <div class="flex gap-1 flex-wrap justify-end">
+                        <a href="/products/{{ product.id }}/recipe" class="btn btn-outline btn-xs">Recipe</a>
                         <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
                         {% if product.is_active %}
                         <button type="button" class="btn btn-outline btn-xs btn-error"

@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Recipe — {{ product.name }} — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-4">
+
+    <div class="flex items-center justify-between flex-wrap gap-2">
+        <div>
+            <h1 class="text-2xl font-extrabold text-amber-900">Recipe</h1>
+            <p class="text-sm text-base-content/60">
+                {{ product.name }} · <span class="font-mono">{{ product.sku }}</span>
+            </p>
+        </div>
+        <div class="flex gap-2">
+            <a href="/products" class="btn btn-ghost btn-sm">← Products</a>
+            <a href="/products/{{ product.id }}/edit" class="btn btn-outline btn-sm">Edit product</a>
+        </div>
+    </div>
+
+    {% if saved %}
+    <div class="alert alert-success"><span>Recipe saved.</span></div>
+    {% endif %}
+    {% if error %}
+    <div class="alert alert-error"><span>{{ error }}</span></div>
+    {% endif %}
+
+    <!-- Summary -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-sm text-base-content/60">Recipe cost / unit</p>
+                <p class="text-2xl font-bold">{{ recipe_cost|money }}</p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-sm text-base-content/60">Can make now</p>
+                <p class="text-2xl font-bold">
+                    {% if capacity.has_recipe %}{{ capacity.capacity }}{% else %}—{% endif %}
+                </p>
+            </div>
+        </div>
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-sm text-base-content/60">Bottleneck</p>
+                <p class="text-lg font-bold truncate">
+                    {% if capacity.bottleneck %}{{ capacity.bottleneck.name }}{% else %}—{% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recipe editor -->
+    <form method="post" action="/products/{{ product.id }}/recipe" class="card bg-base-100 shadow-sm">
+        <div class="card-body space-y-4">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Ingredients per unit</h2>
+
+            {% if not ingredients %}
+            <div class="alert alert-warning">
+                <span>
+                    No active ingredients yet.
+                    <a href="/ingredients/new" class="link">Add ingredients</a> first, then come back.
+                </span>
+            </div>
+            {% endif %}
+
+            <div id="recipe-rows" class="space-y-2">
+                {% for line in recipe_lines %}
+                <div class="recipe-row grid grid-cols-12 gap-2 items-end">
+                    <div class="col-span-5 form-control">
+                        <label class="label"><span class="label-text font-semibold">Ingredient</span></label>
+                        <select name="ingredient_id" class="select select-bordered select-sm w-full ingredient-select" required>
+                            <option value="">Select…</option>
+                            {% for ing in ingredients %}
+                            <option value="{{ ing.id }}"
+                                    data-unit="{{ ing.unit }}"
+                                    {% if ing.id == line.ingredient_id %}selected{% endif %}>
+                                {{ ing.name }} ({{ ing.unit }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-span-3 form-control">
+                        <label class="label"><span class="label-text font-semibold">Quantity</span></label>
+                        <input type="number" step="0.001" min="0.001" name="quantity"
+                               value="{{ line.quantity_per_unit }}"
+                               class="input input-bordered input-sm w-full" required />
+                    </div>
+                    <div class="col-span-2 form-control">
+                        <label class="label"><span class="label-text font-semibold">Unit</span></label>
+                        <select name="unit" class="select select-bordered select-sm w-full unit-select">
+                            {% set ing_unit = line.ingredient.unit %}
+                            <option value="{{ ing_unit }}" selected>{{ ing_unit }}</option>
+                            {% for u in ['g', 'kg', 'ml', 'l', 'pcs', 'packets'] %}
+                                {% if u != ing_unit %}
+                                <option value="{{ u }}">{{ u }}</option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-span-2">
+                        <button type="button" class="btn btn-ghost btn-sm w-full"
+                                onclick="this.closest('.recipe-row').remove()">Remove</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div>
+                <button type="button" class="btn btn-sm btn-outline" onclick="addRecipeRow()">+ Add ingredient</button>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button type="submit" class="btn btn-primary">Save Recipe</button>
+                <a href="/products" class="btn btn-ghost">Cancel</a>
+            </div>
+        </div>
+    </form>
+
+    <!-- Capacity breakdown -->
+    {% if capacity.has_recipe %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body">
+            <h2 class="text-sm font-semibold text-base-content/50 uppercase">Availability per ingredient</h2>
+            <div class="overflow-x-auto">
+                <table class="table table-sm">
+                    <thead>
+                        <tr class="text-amber-900">
+                            <th>Ingredient</th>
+                            <th class="text-right">On hand</th>
+                            <th class="text-right">Per unit</th>
+                            <th class="text-right">Can make</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in capacity.lines %}
+                        <tr class="{% if row.possible == capacity.capacity %}bg-amber-50{% endif %}">
+                            <td class="font-medium">{{ row.ingredient.name }}</td>
+                            <td class="text-right font-mono text-sm">{{ row.available }} {{ row.ingredient.unit }}</td>
+                            <td class="text-right font-mono text-sm">{{ row.per_unit }} {{ row.ingredient.unit }}</td>
+                            <td class="text-right font-bold">{{ row.possible }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-xs text-base-content/60 mt-2">
+                Highlighted rows are limiting the total. Capacity is the minimum across all ingredients.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+
+<!-- Template for adding new recipe rows -->
+<template id="recipe-row-template">
+    <div class="recipe-row grid grid-cols-12 gap-2 items-end">
+        <div class="col-span-5 form-control">
+            <label class="label"><span class="label-text font-semibold">Ingredient</span></label>
+            <select name="ingredient_id" class="select select-bordered select-sm w-full ingredient-select" required>
+                <option value="">Select…</option>
+                {% for ing in ingredients %}
+                <option value="{{ ing.id }}" data-unit="{{ ing.unit }}">{{ ing.name }} ({{ ing.unit }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-span-3 form-control">
+            <label class="label"><span class="label-text font-semibold">Quantity</span></label>
+            <input type="number" step="0.001" min="0.001" name="quantity"
+                   class="input input-bordered input-sm w-full" required />
+        </div>
+        <div class="col-span-2 form-control">
+            <label class="label"><span class="label-text font-semibold">Unit</span></label>
+            <select name="unit" class="select select-bordered select-sm w-full unit-select">
+                <option value="">auto</option>
+                {% for u in ['g', 'kg', 'ml', 'l', 'pcs', 'packets'] %}
+                <option value="{{ u }}">{{ u }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-span-2">
+            <button type="button" class="btn btn-ghost btn-sm w-full"
+                    onclick="this.closest('.recipe-row').remove()">Remove</button>
+        </div>
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addRecipeRow() {
+    const tpl = document.getElementById('recipe-row-template');
+    const clone = tpl.content.cloneNode(true);
+    document.getElementById('recipe-rows').appendChild(clone);
+}
+
+// If the recipe is empty, show one blank row so the user has a form to fill
+(function () {
+    const container = document.getElementById('recipe-rows');
+    if (!container.querySelector('.recipe-row')) {
+        addRecipeRow();
+    }
+})();
+
+// Sync the unit dropdown to the picked ingredient's own unit
+document.addEventListener('change', function (e) {
+    if (!e.target.matches('.ingredient-select')) return;
+    const row = e.target.closest('.recipe-row');
+    const opt = e.target.selectedOptions[0];
+    const unitSelect = row.querySelector('.unit-select');
+    if (opt && opt.dataset.unit) {
+        // Prefer matching option if it exists
+        for (const option of unitSelect.options) {
+            if (option.value === opt.dataset.unit) {
+                option.selected = true;
+                return;
+            }
+        }
+    }
+});
+</script>
+{% endblock %}
