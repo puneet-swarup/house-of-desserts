@@ -2,18 +2,64 @@
 {% block title %}{{ customer.name }} — {{ settings.app_name }}{% endblock %}
 
 {% block content %}
-<div class="max-w-2xl mx-auto space-y-4">
+<div class="max-w-3xl mx-auto space-y-4">
 
-    <!-- Header -->
     <div class="flex justify-between items-center flex-wrap gap-2">
         <h1 class="text-2xl font-extrabold text-amber-900">{{ customer.name }}</h1>
-        <div class="flex gap-2">
-            <a href="/customers/{{ customer.id }}/edit" class="btn btn-primary btn-sm">Edit</a>
+        <div class="flex gap-2 flex-wrap">
+            <a href="/customers/{{ customer.id }}/edit" class="btn btn-outline btn-sm">Edit</a>
             <button type="button" class="btn btn-outline btn-sm btn-error"
                     onclick="softDelete({{ customer.id }})">
                 Delete
             </button>
             <a href="/customers" class="btn btn-ghost btn-sm">← All</a>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Lifetime value</p>
+                <p class="text-xl font-bold">{{ stats.lifetime_value|money }}</p>
+                {% if stats.first_order_date %}
+                <p class="text-xs text-base-content/50">since {{ stats.first_order_date|d }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Orders</p>
+                <p class="text-xl font-bold">{{ stats.order_count }}</p>
+                {% if stats.cancelled_count %}
+                <p class="text-xs text-base-content/50">{{ stats.cancelled_count }} cancelled</p>
+                {% elif stats.last_order_date %}
+                <p class="text-xs text-base-content/50">last {{ stats.last_order_date|d }}</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Outstanding</p>
+                <p class="text-xl font-bold {% if stats.outstanding > 0 %}text-error{% else %}text-success{% endif %}">
+                    {{ stats.outstanding|money }}
+                </p>
+                {% if stats.outstanding > 0 %}
+                <p class="text-xs text-base-content/50">collect pending</p>
+                {% else %}
+                <p class="text-xs text-base-content/50">all settled</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body p-4">
+                <p class="text-xs text-base-content/60 uppercase">Avg order</p>
+                <p class="text-xl font-bold">{{ stats.average_order_value|money }}</p>
+                <p class="text-xs text-base-content/50">per order</p>
+            </div>
         </div>
     </div>
 
@@ -49,7 +95,7 @@
         </div>
     </div>
 
-    <!-- Addresses (read-only, same layout as edit form) -->
+    <!-- Addresses (read-only) -->
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body space-y-4">
             <h2 class="text-sm font-semibold text-base-content/50 uppercase">Addresses</h2>
@@ -59,16 +105,15 @@
             <div class="space-y-3">
                 {% for addr in active_addrs %}
                 <div class="p-3 rounded-lg bg-base-200 border border-base-300">
-                    <div style="display: flex; gap: 0.5rem; align-items: flex-start; width: 100%;">
-                        <div class="input input-bordered input-sm"
-                             style="width: 5.5rem; flex-shrink: 0; font-weight: 600; display: flex; align-items: center;">
+                    <div class="flex gap-2 items-start">
+                        <div class="input input-bordered input-sm w-24 shrink-0 font-semibold flex items-center">
                             {{ addr.label or 'Home' }}
                         </div>
-                        <div class="textarea textarea-bordered textarea-sm"
-                             style="flex: 1 1 0%; min-width: 0; white-space: pre-line; min-height: 2.5rem; padding-top: 0.4rem;">
+                        <div class="textarea textarea-bordered textarea-sm flex-1 min-w-0 whitespace-pre-line"
+                             style="min-height: 2.5rem; padding-top: 0.4rem; resize: none;">
                             {{ addr.line or '' }}
                         </div>
-                        <div style="display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 3.5rem;">
+                        <div class="flex flex-col items-center shrink-0 w-14">
                             {% if addr.is_default %}
                                 <span class="badge badge-success badge-sm">Default</span>
                             {% else %}
@@ -103,7 +148,7 @@
                         </tr>
                     </thead>
                     <tbody>
-                        {% for order in customer.orders %}
+                        {% for order in customer.orders|sort(attribute='order_date', reverse=true) %}
                         <tr>
                             <td>
                                 <a href="/orders/{{ order.id }}" class="font-mono text-sm hover:underline">
@@ -112,16 +157,7 @@
                             </td>
                             <td class="text-sm">{{ order.order_date|d }}</td>
                             <td>
-                                {% set badge_colors = {
-                                    'INQUIRY': 'badge-ghost',
-                                    'CONFIRMED': 'badge-info',
-                                    'IN_PROGRESS': 'badge-warning',
-                                    'READY': 'badge-success',
-                                    'DELIVERED': 'badge-primary',
-                                    'PAID': 'badge-success',
-                                    'CANCELLED': 'badge-error'
-                                } %}
-                                <span class="badge {{ badge_colors.get(order.status.value, 'badge-ghost') }} badge-sm">
+                                <span class="badge {{ order.status_badge_class }} badge-sm">
                                     {{ order.status.value.replace('_', ' ') }}
                                 </span>
                             </td>

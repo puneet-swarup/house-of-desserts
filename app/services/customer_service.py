@@ -221,3 +221,72 @@ def set_default_address(db: Session, customer_id: int, address_id: int) -> Addre
     db.commit()
     db.refresh(target)
     return target
+
+
+def customer_stats(db: Session, customer_id: int) -> dict:
+    """
+    Aggregate statistics for one customer.
+
+    Excludes CANCELLED orders from all money and count totals. Cancelled
+    orders are counted separately as informational context.
+
+    Returns a dict:
+      {
+        "order_count": int,
+        "cancelled_count": int,
+        "lifetime_value": Decimal,
+        "collected": Decimal,
+        "outstanding": Decimal,
+        "average_order_value": Decimal,
+        "first_order_date": datetime | None,
+        "last_order_date": datetime | None,
+      }
+    """
+    from decimal import Decimal
+
+    from sqlalchemy import func
+
+    from app.models import Order, OrderStatus
+
+    # Non-cancelled aggregates
+    active_row = db.execute(
+        select(
+            func.count(Order.id),
+            func.coalesce(func.sum(Order.total_amount), 0),
+            func.coalesce(func.sum(Order.advance_paid), 0),
+            func.coalesce(func.sum(Order.balance_due), 0),
+            func.min(Order.order_date),
+            func.max(Order.order_date),
+        ).where(
+            Order.customer_id == customer_id,
+            Order.status != OrderStatus.CANCELLED,
+        )
+    ).one()
+
+    count, ltv, collected, outstanding, first_date, last_date = active_row
+    count = int(count or 0)
+    ltv_d = Decimal(str(ltv or 0)).quantize(Decimal("0.01"))
+    collected_d = Decimal(str(collected or 0)).quantize(Decimal("0.01"))
+    outstanding_d = Decimal(str(outstanding or 0)).quantize(Decimal("0.01"))
+    avg = (ltv_d / count).quantize(Decimal("0.01")) if count > 0 else Decimal("0.00")
+
+    cancelled = (
+        db.execute(
+            select(func.count(Order.id)).where(
+                Order.customer_id == customer_id,
+                Order.status == OrderStatus.CANCELLED,
+            )
+        ).scalar()
+        or 0
+    )
+
+    return {
+        "order_count": count,
+        "cancelled_count": int(cancelled),
+        "lifetime_value": ltv_d,
+        "collected": collected_d,
+        "outstanding": outstanding_d,
+        "average_order_value": avg,
+        "first_order_date": first_date,
+        "last_order_date": last_date,
+    }

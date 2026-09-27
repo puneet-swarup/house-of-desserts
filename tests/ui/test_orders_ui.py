@@ -23,12 +23,21 @@ def test_create_order_via_ui(app_page, seeded, live_server):
 
 
 def test_status_transition_via_ui(app_page, seeded, live_server):
+    """Order CONFIRMED → IN_PROGRESS via the 'Mark In Progress' button."""
     _create_order(app_page, live_server, seeded)
 
-    app_page.select_option('select[name="status"]', "IN_PROGRESS")
-    app_page.click('button:has-text("Update")')
+    # We're now on the order detail page in CONFIRMED status.
+    # The explicit action button should be present.
+    expect(app_page.locator("button:has-text('Mark IN PROGRESS')")).to_be_visible(timeout=5000)
 
-    expect(app_page.locator("text=IN PROGRESS").first).to_be_visible(timeout=8000)
+    app_page.click("button:has-text('Mark IN PROGRESS')")
+    app_page.wait_for_timeout(1000)
+
+    # After reload, status badge should say IN PROGRESS
+    expect(app_page.locator("span.badge:has-text('IN PROGRESS')")).to_be_visible(timeout=8000)
+
+    # And the next action button should now say READY
+    expect(app_page.locator("button:has-text('Mark READY')")).to_be_visible(timeout=5000)
 
 
 def test_mobile_fab_visible(app_page, seeded, live_server):

@@ -172,10 +172,15 @@ def detail(request: Request, customer_id: int, db: Session = Depends(get_db)):
     templates = request.app.state.templates
     settings = request.app.state.settings
     customer = customer_service.get_customer(db, customer_id)
+    stats = customer_service.customer_stats(db, customer_id)
     return templates.TemplateResponse(
         request=request,
         name="customers/detail.html",
-        context={"settings": settings, "customer": customer},
+        context={
+            "settings": settings,
+            "customer": customer,
+            "stats": stats,
+        },
     )
 
 
