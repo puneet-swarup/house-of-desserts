@@ -1,5 +1,7 @@
 """Product CRUD routes + recipe editor."""
 
+from decimal import Decimal
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -22,8 +24,23 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
     settings = request.app.state.settings
     products = product_service.list_products(db, include_inactive=True)
 
-    # Batch capacity — one query, no N+1
     capacities = recipe_service.capacity_for_products(db, [p.id for p in products])
+
+    # Per-product unit cost and margin. Small bakery with a handful of
+    # SKUs — the per-product loop is fine. If it ever matters, batch it.
+    economics: dict[int, dict] = {}
+    for p in products:
+        cost = recipe_service.recipe_cost(db, p.id)
+        price = p.base_price or Decimal("0.00")
+        margin = price - cost
+        pct = (margin / price * 100).quantize(Decimal("0.01")) if price > 0 else Decimal("0.00")
+        economics[p.id] = {
+            "unit_cost": cost,
+            "unit_price": price,
+            "unit_margin": margin,
+            "margin_pct": pct,
+            "has_recipe": cost > 0,
+        }
 
     return templates.TemplateResponse(
         request=request,
@@ -32,6 +49,7 @@ def list_products_page(request: Request, db: Session = Depends(get_db)):
             "settings": settings,
             "products": products,
             "capacities": capacities,
+            "economics": economics,
         },
     )
 
