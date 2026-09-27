@@ -10,6 +10,7 @@ Key guarantees:
 - Edits only allowed while CONFIRMED; total cannot drop below paid.
 - Entering IN_PROGRESS deducts ingredients per each item's recipe.
   Stock can go negative; the UI warns but does not block.
+- Cancelling from IN_PROGRESS supports salvage (return stock) or waste.
 """
 
 from __future__ import annotations
@@ -43,10 +44,13 @@ from app.utils.time import utcnow
 settings = get_settings()
 
 
-# --- Reads ---
+# ===============================================================
+# Reads
+# ===============================================================
 
 
 def list_orders(db: Session, status: str = "ALL") -> list[Order]:
+    """Unpaginated list. Sort: fulfillment ASC NULLS LAST, order_date DESC."""
     from sqlalchemy import nullslast
 
     query = select(Order).order_by(
@@ -62,6 +66,79 @@ def list_orders(db: Session, status: str = "ALL") -> list[Order]:
     return list(db.execute(query).scalars().all())
 
 
+def search_orders(
+    db: Session,
+    q: str | None = None,
+    status: str = "ALL",
+    page: int = 1,
+    per_page: int = 25,
+) -> tuple[list[Order], dict]:
+    """
+    Paginated order list with optional status filter and text search.
+
+    Search matches (case-insensitive):
+      - Order number, e.g. "0007" matches "HOD-2026-0007"
+      - Customer name
+      - Customer phone, digits-only
+    """
+    from sqlalchemy import nullslast, or_
+
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
+
+    conditions = []
+    if status != "ALL":
+        try:
+            status_enum = OrderStatus(status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
+        conditions.append(Order.status == status_enum)
+
+    if q:
+        term = f"%{q.strip()}%"
+        phone_digits = "".join(c for c in q if c.isdigit())
+        ors = [
+            Order.order_number.ilike(term),
+            Customer.name.ilike(term),
+        ]
+        if len(phone_digits) >= 3:
+            ors.append(Customer.phone.ilike(f"%{phone_digits}%"))
+        conditions.append(or_(*ors))
+
+    base = (
+        select(Order)
+        .join(Customer, Order.customer_id == Customer.id)
+        .order_by(
+            nullslast(Order.fulfillment_date.asc()),
+            Order.order_date.desc(),
+        )
+    )
+    count_q = select(func.count(Order.id)).join(Customer, Order.customer_id == Customer.id)
+    if conditions:
+        base = base.where(*conditions)
+        count_q = count_q.where(*conditions)
+
+    total = db.execute(count_q).scalar() or 0
+    pages = (total + per_page - 1) // per_page if total else 1
+    if page > pages:
+        page = pages
+    offset = (page - 1) * per_page
+
+    rows = list(db.execute(base.limit(per_page).offset(offset)).scalars().all())
+
+    meta = {
+        "q": q or "",
+        "status": status,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+    return rows, meta
+
+
 def get_order(db: Session, order_id: int) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -69,10 +146,18 @@ def get_order(db: Session, order_id: int) -> Order:
     return order
 
 
-# --- Writes ---
+# ===============================================================
+# Writes
+# ===============================================================
 
 
 def create_order(db: Session, data: dict) -> Order:
+    """
+    data keys:
+        customer_id, delivery_type, fulfillment_date, delivery_address, notes,
+        items: list of {product_id, quantity, customization_notes},
+        advance_paid, advance_method, order_date
+    """
     items_data = data.get("items") or []
     if not items_data:
         raise HTTPException(status_code=400, detail="An order must have at least one item")
@@ -99,6 +184,13 @@ def create_order(db: Session, data: dict) -> Order:
 
 
 def update_order(db: Session, order_id: int, data: dict) -> Order:
+    """
+    Edit an existing order. Only allowed while status == CONFIRMED.
+    - Payments already recorded are never touched.
+    - Cannot reduce the order total below what has already been paid.
+    - Every change is written to the audit log with old/new values.
+    - If an invoice has been issued, it is NOT updated.
+    """
     order = get_order(db, order_id)
 
     if order.status != OrderStatus.CONFIRMED:
@@ -216,6 +308,240 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     return order
 
 
+def update_status(
+    db: Session,
+    order_id: int,
+    new_status: str,
+    salvage: bool = False,
+) -> Order:
+    """
+    Move the order to a new status. Enforces ALLOWED_TRANSITIONS.
+
+    Side effects:
+      CONFIRMED → IN_PROGRESS: deduct ingredients per recipe (consumption).
+      IN_PROGRESS → CANCELLED with salvage=True: create matching RETURN
+        movements, so consumed ingredients go back to stock.
+      IN_PROGRESS → CANCELLED with salvage=False: consumption stands;
+        COGS reflects the loss.
+
+    `salvage` is only meaningful for IN_PROGRESS → CANCELLED; ignored otherwise.
+    """
+    order = get_order(db, order_id)
+    try:
+        target = OrderStatus(new_status)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}") from exc
+
+    if target == order.status:
+        return order
+
+    if not order.can_transition_to(target):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Illegal transition: {order.status.value} -> {target.value}",
+        )
+
+    old_status = order.status.value
+
+    if target == OrderStatus.IN_PROGRESS and order.status == OrderStatus.CONFIRMED:
+        _deduct_for_production(db, order)
+    elif target == OrderStatus.CANCELLED and order.status == OrderStatus.IN_PROGRESS and salvage:
+        _return_production(db, order)
+
+    order.status = target
+
+    log_action(
+        db,
+        entity_type="Order",
+        entity_id=order.id,
+        action="STATUS_CHANGE",
+        old_value={"status": old_status},
+        new_value={
+            "status": target.value,
+            "salvage": salvage if target == OrderStatus.CANCELLED else None,
+        },
+    )
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+def record_payment(
+    db: Session,
+    order_id: int,
+    amount: Decimal | float,
+    method: str,
+    reference: str | None,
+    received_at: datetime | None = None,
+) -> Order:
+    """Record a payment. Updates balance only — never touches status."""
+    order = get_order(db, order_id)
+
+    if order.status == OrderStatus.CANCELLED:
+        raise HTTPException(status_code=400, detail="Cannot record payment on a cancelled order")
+
+    amt = money(amount)
+    if amt <= 0:
+        raise HTTPException(status_code=400, detail="Payment amount must be positive")
+    if amt > order.balance_due:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment exceeds balance due ({order.balance_due})",
+        )
+
+    payment = Payment(
+        order_id=order.id,
+        amount=amt,
+        method=method,
+        reference=reference or None,
+        received_at=received_at or utcnow(),
+    )
+    db.add(payment)
+    db.flush()
+
+    order.advance_paid = money(order.advance_paid + amt)
+    order.balance_due = money(order.total_amount - order.advance_paid)
+    if order.balance_due < 0:
+        order.balance_due = Decimal("0.00")
+
+    log_action(
+        db,
+        entity_type="Payment",
+        entity_id=payment.id,
+        action="PAYMENT",
+        new_value={
+            "order_id": order_id,
+            "amount": amt,
+            "method": method,
+            "reference": reference,
+            "balance_after": order.balance_due,
+        },
+    )
+    db.commit()
+    db.refresh(order)
+    return order
+
+
+# ===============================================================
+# Production — deduction, return, COGS, shortages
+# ===============================================================
+
+
+def _compute_needed_ingredients(db: Session, order: Order) -> dict[int, Decimal]:
+    """Sum total consumption per ingredient across all items."""
+    needed: dict[int, Decimal] = {}
+    for item in order.items:
+        recipe = recipe_service.list_recipe(db, item.product_id)
+        for line in recipe:
+            qty = line.quantity_per_unit * Decimal(item.quantity)
+            needed[line.ingredient_id] = needed.get(line.ingredient_id, Decimal("0")) + qty
+    return needed
+
+
+def check_production_shortages(db: Session, order_id: int) -> list[dict]:
+    """
+    Return ingredients that would go negative if production started now.
+    Used for a UI warning banner; does not block.
+    """
+    order = get_order(db, order_id)
+    needed = _compute_needed_ingredients(db, order)
+    if not needed:
+        return []
+
+    stocks = inventory_service.stocks_for(db, list(needed.keys()))
+    shortages = []
+    for ing_id, qty in needed.items():
+        on_hand = stocks.get(ing_id, Decimal("0"))
+        if on_hand < qty:
+            ing = db.get(Ingredient, ing_id)
+            shortages.append(
+                {
+                    "ingredient": ing,
+                    "needed": qty,
+                    "on_hand": on_hand,
+                    "shortfall": qty - on_hand,
+                }
+            )
+    return shortages
+
+
+def _deduct_for_production(db: Session, order: Order) -> None:
+    """
+    Create CONSUMPTION movements for all ingredients used by this order.
+    Movements are added to the session but NOT committed.
+    """
+    needed = _compute_needed_ingredients(db, order)
+    for ing_id, qty in needed.items():
+        if qty <= 0:
+            continue
+        inventory_service.record_movement(
+            db,
+            ing_id,
+            delta=-qty,
+            reason=MovementReason.CONSUMPTION,
+            reference_type="Order",
+            reference_id=order.id,
+            notes=f"Consumed by {order.order_number}",
+            commit=False,
+        )
+
+
+def _return_production(db: Session, order: Order) -> None:
+    """
+    Reverse every CONSUMPTION movement tied to this order with a matching
+    RETURN. Uses the same unit_cost_at_time, so order_cogs nets to zero.
+    """
+    consumptions = (
+        db.execute(
+            select(StockMovement).where(
+                StockMovement.reference_type == "Order",
+                StockMovement.reference_id == order.id,
+                StockMovement.reason == MovementReason.CONSUMPTION,
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    for c in consumptions:
+        inventory_service.record_movement(
+            db,
+            c.ingredient_id,
+            delta=abs(c.delta),
+            reason=MovementReason.RETURN,
+            unit_cost=c.unit_cost_at_time,
+            reference_type="Order",
+            reference_id=order.id,
+            notes=f"Salvaged from cancelled {order.order_number}",
+            commit=False,
+        )
+
+
+def order_cogs(db: Session, order_id: int) -> Decimal:
+    """
+    Cost of goods for one order = CONSUMPTION total minus RETURN total
+    for movements referencing this order. Salvaged cancels net to zero.
+    """
+
+    def _sum(reason: MovementReason) -> Decimal:
+        total = db.execute(
+            select(func.coalesce(func.sum(StockMovement.total_cost_at_time), 0)).where(
+                StockMovement.reference_type == "Order",
+                StockMovement.reference_id == order_id,
+                StockMovement.reason == reason,
+            )
+        ).scalar()
+        return Decimal(str(total or 0))
+
+    net = _sum(MovementReason.CONSUMPTION) - _sum(MovementReason.RETURN)
+    return net.quantize(Decimal("0.01"))
+
+
+# ===============================================================
+# Helpers
+# ===============================================================
+
+
 def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
     fulfillment_date = _parse_dt(data.get("fulfillment_date"))
     if not fulfillment_date:
@@ -307,184 +633,6 @@ def _build_order(db: Session, data: dict, items_data: list[dict]) -> Order:
     return order
 
 
-def update_status(db: Session, order_id: int, new_status: str) -> Order:
-    order = get_order(db, order_id)
-    try:
-        target = OrderStatus(new_status)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}") from exc
-
-    if target == order.status:
-        return order
-
-    if not order.can_transition_to(target):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Illegal transition: {order.status.value} -> {target.value}",
-        )
-
-    old_status = order.status.value
-
-    # Deduct ingredients when production starts.
-    # Stock may go negative; the UI warns but does not block.
-    if target == OrderStatus.IN_PROGRESS and order.status == OrderStatus.CONFIRMED:
-        _deduct_for_production(db, order)
-
-    order.status = target
-
-    log_action(
-        db,
-        entity_type="Order",
-        entity_id=order.id,
-        action="STATUS_CHANGE",
-        old_value={"status": old_status},
-        new_value={"status": target.value},
-    )
-    db.commit()
-    db.refresh(order)
-    return order
-
-
-def record_payment(
-    db: Session,
-    order_id: int,
-    amount: Decimal | float,
-    method: str,
-    reference: str | None,
-    received_at: datetime | None = None,
-) -> Order:
-    order = get_order(db, order_id)
-
-    if order.status == OrderStatus.CANCELLED:
-        raise HTTPException(status_code=400, detail="Cannot record payment on a cancelled order")
-
-    amt = money(amount)
-    if amt <= 0:
-        raise HTTPException(status_code=400, detail="Payment amount must be positive")
-    if amt > order.balance_due:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Payment exceeds balance due ({order.balance_due})",
-        )
-
-    payment = Payment(
-        order_id=order.id,
-        amount=amt,
-        method=method,
-        reference=reference or None,
-        received_at=received_at or utcnow(),
-    )
-    db.add(payment)
-    db.flush()
-
-    order.advance_paid = money(order.advance_paid + amt)
-    order.balance_due = money(order.total_amount - order.advance_paid)
-    if order.balance_due < 0:
-        order.balance_due = Decimal("0.00")
-
-    log_action(
-        db,
-        entity_type="Payment",
-        entity_id=payment.id,
-        action="PAYMENT",
-        new_value={
-            "order_id": order_id,
-            "amount": amt,
-            "method": method,
-            "reference": reference,
-            "balance_after": order.balance_due,
-        },
-    )
-    db.commit()
-    db.refresh(order)
-    return order
-
-
-# --- Production deduction ---
-
-
-def _compute_needed_ingredients(db: Session, order: Order) -> dict[int, Decimal]:
-    """
-    Sum total consumption per ingredient across all items, based on
-    each item's product recipe. Same ingredient used in multiple items
-    is aggregated.
-    """
-    needed: dict[int, Decimal] = {}
-    for item in order.items:
-        recipe = recipe_service.list_recipe(db, item.product_id)
-        for line in recipe:
-            qty = line.quantity_per_unit * Decimal(item.quantity)
-            needed[line.ingredient_id] = needed.get(line.ingredient_id, Decimal("0")) + qty
-    return needed
-
-
-def check_production_shortages(db: Session, order_id: int) -> list[dict]:
-    """
-    Return ingredients that would go negative if production started now.
-    Used for a UI warning banner; does not block.
-    """
-    order = get_order(db, order_id)
-    needed = _compute_needed_ingredients(db, order)
-    if not needed:
-        return []
-
-    stocks = inventory_service.stocks_for(db, list(needed.keys()))
-    shortages = []
-    for ing_id, qty in needed.items():
-        on_hand = stocks.get(ing_id, Decimal("0"))
-        if on_hand < qty:
-            ing = db.get(Ingredient, ing_id)
-            shortages.append(
-                {
-                    "ingredient": ing,
-                    "needed": qty,
-                    "on_hand": on_hand,
-                    "shortfall": qty - on_hand,
-                }
-            )
-    return shortages
-
-
-def _deduct_for_production(db: Session, order: Order) -> None:
-    """
-    Create CONSUMPTION movements for all ingredients used by this order.
-    Movements are added to the session but NOT committed — the caller
-    commits as part of the status-change transaction.
-    """
-    needed = _compute_needed_ingredients(db, order)
-    for ing_id, qty in needed.items():
-        if qty <= 0:
-            continue
-        inventory_service.record_movement(
-            db,
-            ing_id,
-            delta=-qty,
-            reason=MovementReason.CONSUMPTION,
-            reference_type="Order",
-            reference_id=order.id,
-            notes=f"Consumed by {order.order_number}",
-            commit=False,
-        )
-
-
-def order_cogs(db: Session, order_id: int) -> Decimal:
-    """
-    Cost of goods for one order = sum of total_cost_at_time on all
-    CONSUMPTION movements with reference to this order.
-    """
-    total = db.execute(
-        select(func.coalesce(func.sum(StockMovement.total_cost_at_time), 0)).where(
-            StockMovement.reference_type == "Order",
-            StockMovement.reference_id == order_id,
-            StockMovement.reason == MovementReason.CONSUMPTION,
-        )
-    ).scalar()
-    return Decimal(str(total or 0)).quantize(Decimal("0.01"))
-
-
-# --- Helpers ---
-
-
 def _parse_dt(value):
     if value is None or value == "":
         return None
@@ -494,78 +642,3 @@ def _parse_dt(value):
         return datetime.fromisoformat(value)
     except (TypeError, ValueError):
         return None
-
-
-def search_orders(
-    db: Session,
-    q: str | None = None,
-    status: str = "ALL",
-    page: int = 1,
-    per_page: int = 25,
-) -> tuple[list[Order], dict]:
-    """
-    Paginated order list with optional status filter and text search.
-
-    Search matches (case-insensitive):
-      - Order number, e.g. "0007" matches "HOD-2026-0007"
-      - Customer name
-      - Customer phone, digits-only (so "99999" matches "+91 99999 99999")
-
-    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
-    """
-    from sqlalchemy import func, nullslast, or_
-
-    page = max(1, page)
-    per_page = max(1, min(per_page, 100))
-
-    conditions = []
-    if status != "ALL":
-        try:
-            status_enum = OrderStatus(status)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
-        conditions.append(Order.status == status_enum)
-
-    if q:
-        term = f"%{q.strip()}%"
-        phone_digits = "".join(c for c in q if c.isdigit())
-        ors = [
-            Order.order_number.ilike(term),
-            Customer.name.ilike(term),
-        ]
-        if len(phone_digits) >= 3:
-            ors.append(Customer.phone.ilike(f"%{phone_digits}%"))
-        conditions.append(or_(*ors))
-
-    base = (
-        select(Order)
-        .join(Customer, Order.customer_id == Customer.id)
-        .order_by(
-            nullslast(Order.fulfillment_date.asc()),
-            Order.order_date.desc(),
-        )
-    )
-    count_q = select(func.count(Order.id)).join(Customer, Order.customer_id == Customer.id)
-    if conditions:
-        base = base.where(*conditions)
-        count_q = count_q.where(*conditions)
-
-    total = db.execute(count_q).scalar() or 0
-    pages = (total + per_page - 1) // per_page if total else 1
-    if page > pages:
-        page = pages
-    offset = (page - 1) * per_page
-
-    rows = list(db.execute(base.limit(per_page).offset(offset)).scalars().all())
-
-    meta = {
-        "q": q or "",
-        "status": status,
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "pages": pages,
-        "has_prev": page > 1,
-        "has_next": page < pages,
-    }
-    return rows, meta

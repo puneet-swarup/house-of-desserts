@@ -155,7 +155,30 @@
                     Fulfillment and payment are tracked separately.
                 </p>
 
-                {% if order.allowed_next_statuses %}
+                {% if order.status.value == 'IN_PROGRESS' %}
+                <div class="flex flex-wrap gap-2">
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "READY"}'
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-primary">Mark Ready</button>
+                    </form>
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED", "salvage": "true"}'
+                          hx-confirm="Return consumed ingredients to stock? Use this when the order is cancelled before or during baking and the ingredients are still usable."
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-warning">Cancel · return stock</button>
+                    </form>
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED", "salvage": "false"}'
+                          hx-confirm="Write off all consumed ingredients as wastage? Use this if the ingredients are already spent or ruined."
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-error">Cancel · waste</button>
+                    </form>
+                </div>
+                {% elif order.allowed_next_statuses %}
                 <form hx-post="/orders/{{ order.id }}/status"
                       hx-swap="none"
                       hx-on::after-request="if (event.detail.successful) window.location.reload()"

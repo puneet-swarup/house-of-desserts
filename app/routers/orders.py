@@ -274,8 +274,14 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
 
 
 @router.post("/{order_id}/status")
-def update_status(order_id: int, status: str = Form(...), db: Session = Depends(get_db)):
-    order = order_service.update_status(db, order_id, status)
+def update_status(
+    order_id: int,
+    status: str = Form(...),
+    salvage: str = Form("false"),
+    db: Session = Depends(get_db),
+):
+    salvage_bool = salvage.strip().lower() in ("true", "1", "yes", "on")
+    order = order_service.update_status(db, order_id, status, salvage=salvage_bool)
     return {"ok": True, "status": order.status.value}
 
 
