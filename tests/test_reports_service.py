@@ -7,8 +7,9 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.config import get_settings
-from app.models import OrderStatus
-from app.services import reports_service
+from app.models import MovementReason, OrderStatus
+from app.services import inventory_service as inv
+from app.services import recipe_service, reports_service
 from app.services.order_service import create_order, record_payment, update_status
 
 
@@ -181,3 +182,152 @@ def test_reports_download_endpoint(client, db_session, customer, product, tmp_pa
 def test_download_rejects_path_traversal(client):
     resp = client.get("/reports/download/..%2F..%2Fetc%2Fpasswd")
     assert resp.status_code in (400, 404)
+
+
+def _ingredient(db, name, cost="0.05"):
+    return inv.create_ingredient(
+        db,
+        {
+            "name": name,
+            "unit": "g",
+            "kind": "RAW",
+            "cost_per_unit": Decimal(cost),
+            "reorder_threshold": Decimal("0"),
+        },
+    )
+
+
+def _stock(db, ing, qty, cost="0.05"):
+    inv.record_movement(
+        db,
+        ing.id,
+        delta=Decimal(str(qty)),
+        reason=MovementReason.PURCHASE,
+        unit_cost=Decimal(str(cost)),
+    )
+
+
+def test_report_includes_cogs_when_order_consumed(db, customer, product):
+    """An IN_PROGRESS order in the month contributes COGS."""
+    from app.services.order_service import create_order, update_status
+
+    ing = _ingredient(db, "Report Flour")
+    _stock(db, ing, 5000, cost="0.50")
+    recipe_service.upsert_recipe_line(db, product.id, ing.id, Decimal("100"))
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+
+    tz = ZoneInfo(get_settings().business_timezone)
+    dt_local = datetime(2026, 9, 15, 12, 0, tzinfo=tz)
+
+    o = create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": product.id, "quantity": 2}],
+            "fulfillment_date": dt_local.isoformat(),
+            "order_date": dt_local.date().isoformat(),
+        },
+    )
+    update_status(db, o.id, "IN_PROGRESS")
+
+    report = reports_service.build_report(db, 2026, 9)
+    # 2 × 100g × 0.50 = ₹100
+    assert report["total_cogs"] == Decimal("100.00")
+    assert report["gross_margin"] == report["total_revenue"] - Decimal("100.00")
+
+
+def test_report_cogs_zero_when_no_consumption(db, customer, product):
+    """Confirmed orders that never reached IN_PROGRESS have zero COGS."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+    from app.services.order_service import create_order
+
+    tz = ZoneInfo(get_settings().business_timezone)
+    dt_local = datetime(2026, 9, 15, 12, 0, tzinfo=tz)
+
+    create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": product.id, "quantity": 1}],
+            "fulfillment_date": dt_local.isoformat(),
+            "order_date": dt_local.date().isoformat(),
+        },
+    )
+
+    report = reports_service.build_report(db, 2026, 9)
+    assert report["total_cogs"] == Decimal("0.00")
+    assert report["gross_margin"] == report["total_revenue"]
+
+
+def test_report_itemized_rows_have_cogs_and_margin(db, customer, product):
+    from app.services.order_service import create_order, update_status
+
+    ing = _ingredient(db, "Itemized Flour")
+    _stock(db, ing, 5000, cost="0.10")
+    recipe_service.upsert_recipe_line(db, product.id, ing.id, Decimal("50"))
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+
+    tz = ZoneInfo(get_settings().business_timezone)
+    dt_local = datetime(2026, 9, 20, 12, 0, tzinfo=tz)
+
+    o = create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": product.id, "quantity": 4}],
+            "fulfillment_date": dt_local.isoformat(),
+            "order_date": dt_local.date().isoformat(),
+        },
+    )
+    update_status(db, o.id, "IN_PROGRESS")
+
+    report = reports_service.build_report(db, 2026, 9)
+    assert len(report["itemized"]) == 1
+    row = report["itemized"][0]
+    assert row["cogs"] == Decimal("20.00")  # 4 × 50g × 0.10
+    assert row["margin"] == row["total"] - Decimal("20.00")
+
+
+def test_report_top_products_has_unit_cost_and_margin(db, customer, product):
+    from app.services.order_service import create_order
+
+    ing = _ingredient(db, "TopProd Flour")
+    _stock(db, ing, 1000, cost="0.25")
+    recipe_service.upsert_recipe_line(db, product.id, ing.id, Decimal("10"))
+
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.config import get_settings
+
+    tz = ZoneInfo(get_settings().business_timezone)
+    dt_local = datetime(2026, 9, 10, 12, 0, tzinfo=tz)
+
+    create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": product.id, "quantity": 1}],
+            "fulfillment_date": dt_local.isoformat(),
+            "order_date": dt_local.date().isoformat(),
+        },
+    )
+
+    report = reports_service.build_report(db, 2026, 9)
+    assert len(report["top_products"]) == 1
+    tp = report["top_products"][0]
+    # 10g × 0.25 = 2.50 per unit
+    assert tp["unit_cost"] == Decimal("2.50")
+    assert tp["unit_price"] == product.base_price
+    assert tp["unit_margin"] == product.base_price - Decimal("2.50")

@@ -95,11 +95,14 @@ def build_report(db: Session, year: int, month: int) -> dict:
     """
     Return a dict with all data needed to render a month's report.
     Includes cancelled orders in a separate count but excludes them
-    from revenue.
+    from revenue and COGS.
     """
+    from sqlalchemy import func
+
+    from app.models import MovementReason, StockMovement
+
     start_utc, end_utc = _month_bounds_utc(year, month)
 
-    # All orders in the window (including cancelled, for the count)
     all_orders = (
         db.execute(
             select(Order)
@@ -113,17 +116,49 @@ def build_report(db: Session, year: int, month: int) -> dict:
 
     active_orders = [o for o in all_orders if o.status != OrderStatus.CANCELLED]
 
+    # --- Batch COGS lookup for all active orders, one query ---
+    active_ids = [o.id for o in active_orders]
+    cogs_by_order: dict[int, Decimal] = {}
+    if active_ids:
+        rows = db.execute(
+            select(
+                StockMovement.reference_id,
+                func.coalesce(func.sum(StockMovement.total_cost_at_time), 0),
+            )
+            .where(
+                StockMovement.reference_type == "Order",
+                StockMovement.reference_id.in_(active_ids),
+                StockMovement.reason == MovementReason.CONSUMPTION,
+            )
+            .group_by(StockMovement.reference_id)
+        ).all()
+        cogs_by_order = {oid: money(Decimal(str(total or 0))) for oid, total in rows}
+
     total_revenue = Decimal("0.00")
     total_gst = Decimal("0.00")
     total_received = Decimal("0.00")
     total_outstanding = Decimal("0.00")
+    total_cogs = Decimal("0.00")
 
     for o in active_orders:
         total_revenue += money(o.total_amount)
         total_received += money(o.advance_paid)
         total_outstanding += money(o.balance_due)
+        total_cogs += cogs_by_order.get(o.id, Decimal("0.00"))
         for it in o.items:
             total_gst += money(it.gst_amount)
+
+    total_revenue = money(total_revenue)
+    total_gst = money(total_gst)
+    total_received = money(total_received)
+    total_outstanding = money(total_outstanding)
+    total_cogs = money(total_cogs)
+    gross_margin = money(total_revenue - total_cogs)
+    gross_margin_pct = (
+        (gross_margin / total_revenue * 100).quantize(Decimal("0.01"))
+        if total_revenue > 0
+        else Decimal("0.00")
+    )
 
     # Status breakdown (all orders, including cancelled)
     by_status: dict[str, int] = {}
@@ -135,7 +170,10 @@ def build_report(db: Session, year: int, month: int) -> dict:
     for o in active_orders:
         by_payment[o.payment_state] = by_payment.get(o.payment_state, 0) + 1
 
-    # Top products by revenue (non-cancelled)
+    # Top products by revenue (non-cancelled). Unit cost/margin shown at
+    # CURRENT recipe prices — a planning number, not a historical one.
+    from app.services.recipe_service import recipe_cost as _recipe_cost
+
     product_sales: dict[int, dict] = {}
     for o in active_orders:
         for it in o.items:
@@ -150,15 +188,26 @@ def build_report(db: Session, year: int, month: int) -> dict:
             product_sales[pid]["qty"] += it.quantity
             product_sales[pid]["revenue"] += money(it.line_total)
 
+    for pid, row in product_sales.items():
+        unit_cost = _recipe_cost(db, pid) if row["qty"] > 0 else Decimal("0.00")
+        row["unit_cost"] = unit_cost
+        # Fetch current base price for margin computation
+        from app.models import Product
+
+        prod = db.get(Product, pid)
+        row["unit_price"] = money(prod.base_price) if prod else Decimal("0.00")
+        row["unit_margin"] = money(row["unit_price"] - unit_cost)
+
     top_products = sorted(
         product_sales.values(),
         key=lambda r: r["revenue"],
         reverse=True,
     )[:10]
 
-    # Itemized list — same order as all_orders but flat
+    # Itemized list — add COGS and margin per order
     itemized: list[dict] = []
     for o in active_orders:
+        o_cogs = cogs_by_order.get(o.id, Decimal("0.00"))
         itemized.append(
             {
                 "order_number": o.order_number,
@@ -171,6 +220,8 @@ def build_report(db: Session, year: int, month: int) -> dict:
                 "gst": sum((money(it.gst_amount) for it in o.items), Decimal("0.00")),
                 "paid": money(o.advance_paid),
                 "balance": money(o.balance_due),
+                "cogs": o_cogs,
+                "margin": money(o.total_amount - o_cogs),
             }
         )
 
@@ -182,10 +233,13 @@ def build_report(db: Session, year: int, month: int) -> dict:
         "orders_total": len(all_orders),
         "orders_active": len(active_orders),
         "orders_cancelled": by_status.get("CANCELLED", 0),
-        "total_revenue": money(total_revenue),
-        "total_gst": money(total_gst),
-        "total_received": money(total_received),
-        "total_outstanding": money(total_outstanding),
+        "total_revenue": total_revenue,
+        "total_gst": total_gst,
+        "total_received": total_received,
+        "total_outstanding": total_outstanding,
+        "total_cogs": total_cogs,
+        "gross_margin": gross_margin,
+        "gross_margin_pct": gross_margin_pct,
         "average_order_value": (
             money(total_revenue / len(active_orders)) if active_orders else Decimal("0.00")
         ),
@@ -215,6 +269,9 @@ def render_csv(report: dict) -> str:
     w.writerow(["Orders cancelled", report["orders_cancelled"]])
     w.writerow(["Revenue", f"{report['total_revenue']:.2f}"])
     w.writerow(["GST collected", f"{report['total_gst']:.2f}"])
+    w.writerow(["Cost of goods (COGS)", f"{report['total_cogs']:.2f}"])
+    w.writerow(["Gross margin", f"{report['gross_margin']:.2f}"])
+    w.writerow(["Gross margin %", f"{report['gross_margin_pct']:.2f}"])
     w.writerow(["Amount received", f"{report['total_received']:.2f}"])
     w.writerow(["Outstanding", f"{report['total_outstanding']:.2f}"])
     w.writerow(["Average order value", f"{report['average_order_value']:.2f}"])
@@ -231,9 +288,29 @@ def render_csv(report: dict) -> str:
     w.writerow([])
 
     w.writerow(["Top products"])
-    w.writerow(["SKU", "Name", "Quantity", "Revenue"])
+    w.writerow(
+        [
+            "SKU",
+            "Name",
+            "Quantity",
+            "Revenue",
+            "Unit price (current)",
+            "Unit cost (current)",
+            "Unit margin (current)",
+        ]
+    )
     for p in report["top_products"]:
-        w.writerow([p["sku"], p["name"], p["qty"], f"{p['revenue']:.2f}"])
+        w.writerow(
+            [
+                p["sku"],
+                p["name"],
+                p["qty"],
+                f"{p['revenue']:.2f}",
+                f"{p['unit_price']:.2f}",
+                f"{p['unit_cost']:.2f}",
+                f"{p['unit_margin']:.2f}",
+            ]
+        )
     w.writerow([])
 
     w.writerow(["Itemized orders"])
@@ -247,6 +324,8 @@ def render_csv(report: dict) -> str:
             "Payment",
             "Total",
             "GST",
+            "COGS",
+            "Margin",
             "Paid",
             "Balance",
         ]
@@ -262,6 +341,8 @@ def render_csv(report: dict) -> str:
                 row["payment_state"],
                 f"{row['total']:.2f}",
                 f"{row['gst']:.2f}",
+                f"{row['cogs']:.2f}",
+                f"{row['margin']:.2f}",
                 f"{row['paid']:.2f}",
                 f"{row['balance']:.2f}",
             ]
@@ -353,6 +434,9 @@ def render_pdf(report: dict, output_path: Path) -> None:
         ("Orders cancelled", str(report["orders_cancelled"])),
         ("Revenue", money_str(report["total_revenue"])),
         ("GST collected", money_str(report["total_gst"])),
+        ("Cost of goods (COGS)", money_str(report["total_cogs"])),
+        ("Gross margin", money_str(report["gross_margin"])),
+        ("Gross margin %", f"{report['gross_margin_pct']:.2f}%"),
         ("Amount received", money_str(report["total_received"])),
         ("Outstanding", money_str(report["total_outstanding"])),
         ("Average order value", money_str(report["average_order_value"])),
@@ -376,30 +460,43 @@ def render_pdf(report: dict, output_path: Path) -> None:
         pdf.set_font(font, "B", 11)
         pdf.cell(0, 7, "Top products by revenue", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-        pdf.set_font(font, "B", 9)
-        pdf.cell(30, 6, "SKU", border=1)
-        pdf.cell(95, 6, "Name", border=1)
-        pdf.cell(20, 6, "Qty", border=1, align="R")
-        pdf.cell(45, 6, "Revenue", border=1, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_font(font, "B", 8)
+        pdf.cell(28, 6, "SKU", border=1)
+        pdf.cell(60, 6, "Name", border=1)
+        pdf.cell(15, 6, "Qty", border=1, align="R")
+        pdf.cell(25, 6, "Revenue", border=1, align="R")
+        pdf.cell(25, 6, "Unit cost", border=1, align="R")
+        pdf.cell(25, 6, "Unit margin", border=1, align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
-        pdf.set_font(font, "", 9)
+        pdf.set_font(font, "", 8)
         for p in report["top_products"]:
             name = p["name"]
-            if len(name) > 50:
-                name = name[:47] + "..."
-            pdf.cell(30, 6, p["sku"][:20], border=1)
-            pdf.cell(95, 6, name, border=1)
-            pdf.cell(20, 6, str(p["qty"]), border=1, align="R")
+            if len(name) > 32:
+                name = name[:29] + "..."
+            pdf.cell(28, 6, p["sku"][:18], border=1)
+            pdf.cell(60, 6, name, border=1)
+            pdf.cell(15, 6, str(p["qty"]), border=1, align="R")
+            pdf.cell(25, 6, money_str(p["revenue"]), border=1, align="R")
+            pdf.cell(25, 6, money_str(p["unit_cost"]), border=1, align="R")
             pdf.cell(
-                45,
+                25,
                 6,
-                money_str(p["revenue"]),
+                money_str(p["unit_margin"]),
                 border=1,
                 align="R",
                 new_x=XPos.LMARGIN,
                 new_y=YPos.NEXT,
             )
-        pdf.ln(6)
+        pdf.ln(2)
+        pdf.set_font(font, "", 7)
+        pdf.cell(
+            0,
+            4,
+            "Unit cost and margin are at CURRENT recipe prices, for planning.",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
+        pdf.ln(4)
 
     # Itemized
     pdf.set_font(font, "B", 11)
@@ -409,33 +506,35 @@ def render_pdf(report: dict, output_path: Path) -> None:
         pdf.set_font(font, "", 10)
         pdf.cell(0, 6, "No orders in this period.", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     else:
-        pdf.set_font(font, "B", 8)
+        pdf.set_font(font, "B", 7)
         cols = [
-            ("Order", 32),
-            ("Date", 24),
-            ("Customer", 40),
-            ("Status", 22),
-            ("Pay", 16),
-            ("Total", 24),
-            ("Balance", 22),
+            ("Order", 28),
+            ("Date", 20),
+            ("Customer", 30),
+            ("Status", 18),
+            ("Total", 22),
+            ("COGS", 20),
+            ("Margin", 20),
+            ("Balance", 20),
         ]
         for label, w in cols:
             pdf.cell(w, 6, label, border=1)
         pdf.ln()
 
-        pdf.set_font(font, "", 8)
+        pdf.set_font(font, "", 7)
         for row in report["itemized"]:
             cust = row["customer_name"]
-            if len(cust) > 22:
-                cust = cust[:20] + ".."
-            pdf.cell(32, 5, row["order_number"], border=1)
-            pdf.cell(24, 5, row["order_date"].strftime("%d %b %Y"), border=1)
-            pdf.cell(40, 5, cust, border=1)
-            pdf.cell(22, 5, row["status"], border=1)
-            pdf.cell(16, 5, row["payment_state"], border=1)
-            pdf.cell(24, 5, money_str(row["total"]), border=1, align="R")
+            if len(cust) > 18:
+                cust = cust[:16] + ".."
+            pdf.cell(28, 5, row["order_number"], border=1)
+            pdf.cell(20, 5, row["order_date"].strftime("%d %b %Y"), border=1)
+            pdf.cell(30, 5, cust, border=1)
+            pdf.cell(18, 5, row["status"], border=1)
+            pdf.cell(22, 5, money_str(row["total"]), border=1, align="R")
+            pdf.cell(20, 5, money_str(row["cogs"]), border=1, align="R")
+            pdf.cell(20, 5, money_str(row["margin"]), border=1, align="R")
             pdf.cell(
-                22,
+                20,
                 5,
                 money_str(row["balance"]),
                 border=1,
