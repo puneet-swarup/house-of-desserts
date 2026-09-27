@@ -154,3 +154,112 @@ def test_salvage_on_confirmed_cancel_does_nothing_extra(db, customer):
     db.expire_all()
     assert inv.on_hand(db, ing.id) == Decimal("1000")
     assert db.query(StockMovement).filter_by(reference_type="Order", reference_id=o.id).count() == 0
+
+
+def test_cancel_from_ready_keeps_consumption(db, customer):
+    """READY → CANCELLED: ingredients were used, food was made. Consumption stands."""
+    ing = _ingredient(db, "Ready Cancel Flour", cost="0.50")
+    _stock(db, ing, 5000, cost="0.50")
+    p = _product(db, "READY-CANCEL-1")
+    recipe_service.upsert_recipe_line(db, p.id, ing.id, Decimal("200"))
+
+    o = order_service.create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": p.id, "quantity": 2}],
+            "fulfillment_date": "2026-12-31T12:00",
+        },
+    )
+    order_service.update_status(db, o.id, "IN_PROGRESS")
+    order_service.update_status(db, o.id, "READY")
+
+    db.expire_all()
+    assert inv.on_hand(db, ing.id) == Decimal("4600")  # 5000 - 400
+
+    order_service.update_status(db, o.id, "CANCELLED")
+
+    db.expire_all()
+    # Consumption stands — no returns
+    assert inv.on_hand(db, ing.id) == Decimal("4600")
+    # COGS reflects the loss
+    assert order_service.order_cogs(db, o.id) == Decimal("200.00")  # 400g × 0.50
+
+
+def test_cancel_from_ready_has_no_return_movements(db, customer):
+    ing = _ingredient(db, "Ready Check", cost="0.50")
+    _stock(db, ing, 5000, cost="0.50")
+    p = _product(db, "READY-CANCEL-2")
+    recipe_service.upsert_recipe_line(db, p.id, ing.id, Decimal("100"))
+
+    o = order_service.create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": p.id, "quantity": 1}],
+            "fulfillment_date": "2026-12-31T12:00",
+        },
+    )
+    order_service.update_status(db, o.id, "IN_PROGRESS")
+    order_service.update_status(db, o.id, "READY")
+    order_service.update_status(db, o.id, "CANCELLED")
+
+    db.expire_all()
+    returns = (
+        db.query(StockMovement)
+        .filter_by(reference_type="Order", reference_id=o.id, reason=MovementReason.RETURN)
+        .count()
+    )
+    assert returns == 0
+
+
+def test_cancel_from_ready_via_http(client, db_session, customer):
+    ing = _ingredient(db_session, "HTTP Ready", cost="0.50")
+    _stock(db_session, ing, 5000, cost="0.50")
+    p = _product(db_session, "READY-CANCEL-3")
+    recipe_service.upsert_recipe_line(db_session, p.id, ing.id, Decimal("100"))
+
+    o = order_service.create_order(
+        db_session,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": p.id, "quantity": 1}],
+            "fulfillment_date": "2026-12-31T12:00",
+        },
+    )
+    order_service.update_status(db_session, o.id, "IN_PROGRESS")
+    order_service.update_status(db_session, o.id, "READY")
+
+    resp = client.post(
+        f"/orders/{o.id}/status",
+        data={"status": "CANCELLED"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "CANCELLED"
+
+
+def test_cancel_from_delivered_rejected(db, customer):
+    """DELIVERED → CANCELLED is not an allowed transition."""
+    import pytest
+    from fastapi import HTTPException
+
+    ing = _ingredient(db, "Delivered Item", cost="0.50")
+    _stock(db, ing, 5000, cost="0.50")
+    p = _product(db, "DELIV-NO-CANCEL")
+    recipe_service.upsert_recipe_line(db, p.id, ing.id, Decimal("100"))
+
+    o = order_service.create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "items": [{"product_id": p.id, "quantity": 1}],
+            "fulfillment_date": "2026-12-31T12:00",
+        },
+    )
+    order_service.update_status(db, o.id, "IN_PROGRESS")
+    order_service.update_status(db, o.id, "READY")
+    order_service.update_status(db, o.id, "DELIVERED")
+
+    with pytest.raises(HTTPException) as ei:
+        order_service.update_status(db, o.id, "CANCELLED")
+    assert ei.value.status_code == 400

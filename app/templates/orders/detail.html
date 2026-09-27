@@ -151,18 +151,33 @@
                     <span class="badge {{ order.status_badge_class }}">{{ order.status.value.replace('_', ' ') }}</span>
                     <span class="badge {{ order.payment_badge_class }}">{{ order.payment_label }}</span>
                 </div>
-                <p class="text-xs text-base-content/50 mb-2">
+                <p class="text-xs text-base-content/50 mb-3">
                     Fulfillment and payment are tracked separately.
                 </p>
 
-                {% if order.status.value == 'IN_PROGRESS' %}
+                {% set st = order.status.value %}
+                {% set next_primary = {
+                    'INQUIRY':     'CONFIRMED',
+                    'CONFIRMED':   'IN_PROGRESS',
+                    'IN_PROGRESS': 'READY',
+                    'READY':       'DELIVERED',
+                    'DELIVERED':   'PAID'
+                }.get(st) %}
+
+                {% if next_primary %}
                 <div class="flex flex-wrap gap-2">
+                    {# Primary forward action #}
                     <form hx-post="/orders/{{ order.id }}/status"
-                          hx-vals='{"status": "READY"}'
+                          hx-vals='{"status": "{{ next_primary }}"}'
                           hx-swap="none"
                           hx-on::after-request="if (event.detail.successful) window.location.reload()">
-                        <button class="btn btn-sm btn-primary">Mark Ready</button>
+                        <button class="btn btn-sm btn-primary">
+                            Mark {{ next_primary.replace('_', ' ') }}
+                        </button>
                     </form>
+
+                    {# Cancellation options #}
+                    {% if st == 'IN_PROGRESS' %}
                     <form hx-post="/orders/{{ order.id }}/status"
                           hx-vals='{"status": "CANCELLED", "salvage": "true"}'
                           hx-confirm="Return consumed ingredients to stock? Use this when the order is cancelled before or during baking and the ingredients are still usable."
@@ -172,24 +187,28 @@
                     </form>
                     <form hx-post="/orders/{{ order.id }}/status"
                           hx-vals='{"status": "CANCELLED", "salvage": "false"}'
-                          hx-confirm="Write off all consumed ingredients as wastage? Use this if the ingredients are already spent or ruined."
+                          hx-confirm="Write off all consumed ingredients as wastage? Consumption costs stay on this order."
                           hx-swap="none"
                           hx-on::after-request="if (event.detail.successful) window.location.reload()">
                         <button class="btn btn-sm btn-outline btn-error">Cancel · waste</button>
                     </form>
+                    {% elif st in ['INQUIRY', 'CONFIRMED', 'READY'] %}
+                    <form hx-post="/orders/{{ order.id }}/status"
+                          hx-vals='{"status": "CANCELLED"}'
+                          hx-confirm="{% if st == 'READY' %}Cancel this ready order? The food is already made. Ingredient costs will stand as a loss.{% else %}Cancel this order?{% endif %}"
+                          hx-swap="none"
+                          hx-on::after-request="if (event.detail.successful) window.location.reload()">
+                        <button class="btn btn-sm btn-outline btn-error">Cancel</button>
+                    </form>
+                    {% endif %}
                 </div>
-                {% elif order.allowed_next_statuses %}
-                <form hx-post="/orders/{{ order.id }}/status"
-                      hx-swap="none"
-                      hx-on::after-request="if (event.detail.successful) window.location.reload()"
-                      class="flex gap-2">
-                    <select name="status" class="select select-bordered select-sm flex-1">
-                        {% for s in order.allowed_next_statuses %}
-                            <option value="{{ s.value }}">{{ s.value.replace('_', ' ') }}</option>
-                        {% endfor %}
-                    </select>
-                    <button class="btn btn-sm btn-primary" type="submit">Update</button>
-                </form>
+
+                {% if st == 'READY' %}
+                <p class="text-xs text-base-content/50 mt-2">
+                    Ready orders cannot return ingredients to stock — the food already exists.
+                </p>
+                {% endif %}
+
                 {% else %}
                 <p class="text-sm text-base-content/50">
                     No further transitions — this order is in a terminal state.
@@ -202,7 +221,7 @@
             <div class="card-body">
                 <h2 class="text-sm font-semibold text-base-content/50 uppercase">Money</h2>
 
-                                <div class="space-y-1 text-sm max-w-xs">
+                <div class="space-y-1 text-sm max-w-xs">
                     <div class="flex justify-between">
                         <span class="text-base-content/60">Total</span>
                         <span class="font-semibold">{{ order.total_amount|money }}</span>
