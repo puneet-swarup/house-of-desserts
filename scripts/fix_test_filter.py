@@ -21,6 +21,6 @@ else:
     print("Exact pattern not found. Showing context around the issue:")
     idx = text.find("Customer.is_active.is_(True)")
     if idx >= 0:
-        print(text[max(0, idx - 400):idx + 200])
+        print(text[max(0, idx - 400) : idx + 200])
     else:
         print("No reference to Customer.is_active.is_(True) — already fixed?")

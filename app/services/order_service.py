@@ -8,6 +8,8 @@ Key guarantees:
 - Status changes validated against ALLOWED_TRANSITIONS.
 - Order number from NumberSequence, unique-constrained.
 - Edits only allowed while CONFIRMED; total cannot drop below paid.
+- Entering IN_PROGRESS deducts ingredients per each item's recipe.
+  Stock can go negative; the UI warns but does not block.
 """
 
 from __future__ import annotations
@@ -16,19 +18,23 @@ from datetime import datetime
 from decimal import Decimal
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import (
     Customer,
+    Ingredient,
+    MovementReason,
     Order,
     OrderItem,
     OrderStatus,
     Payment,
     Product,
+    StockMovement,
 )
+from app.services import inventory_service, recipe_service
 from app.services.audit_service import log_action
 from app.services.numbering import next_order_number
 from app.utils.money import gst_for_line, line_total_with_gst, money
@@ -41,10 +47,6 @@ settings = get_settings()
 
 
 def list_orders(db: Session, status: str = "ALL") -> list[Order]:
-    """
-    Unpaginated list — kept for existing callers.
-    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
-    """
     from sqlalchemy import nullslast
 
     query = select(Order).order_by(
@@ -60,81 +62,6 @@ def list_orders(db: Session, status: str = "ALL") -> list[Order]:
     return list(db.execute(query).scalars().all())
 
 
-def search_orders(
-    db: Session,
-    q: str | None = None,
-    status: str = "ALL",
-    page: int = 1,
-    per_page: int = 25,
-) -> tuple[list[Order], dict]:
-    """
-    Paginated order list with optional status filter and text search.
-
-    Search matches (case-insensitive, substring):
-      - Order number, e.g. "0007" matches "HOD-2026-0007"
-      - Customer name
-      - Customer phone, digits only (so "99999" matches "+91 99999 99999")
-
-    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
-    """
-    from sqlalchemy import func, nullslast, or_
-
-    page = max(1, page)
-    per_page = max(1, min(per_page, 100))
-
-    conditions = []
-    if status != "ALL":
-        try:
-            status_enum = OrderStatus(status)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
-        conditions.append(Order.status == status_enum)
-
-    if q:
-        term = f"%{q.strip()}%"
-        phone_digits = "".join(c for c in q if c.isdigit())
-        ors = [
-            Order.order_number.ilike(term),
-            Customer.name.ilike(term),
-        ]
-        if len(phone_digits) >= 3:
-            ors.append(Customer.phone.ilike(f"%{phone_digits}%"))
-        conditions.append(or_(*ors))
-
-    base = (
-        select(Order)
-        .join(Customer, Order.customer_id == Customer.id)
-        .order_by(
-            nullslast(Order.fulfillment_date.asc()),
-            Order.order_date.desc(),
-        )
-    )
-    count_q = select(func.count(Order.id)).join(Customer, Order.customer_id == Customer.id)
-    if conditions:
-        base = base.where(*conditions)
-        count_q = count_q.where(*conditions)
-
-    total = db.execute(count_q).scalar() or 0
-    pages = (total + per_page - 1) // per_page if total else 1
-    if page > pages:
-        page = pages
-    offset = (page - 1) * per_page
-
-    rows = list(db.execute(base.limit(per_page).offset(offset)).scalars().all())
-
-    meta = {
-        "q": q or "",
-        "status": status,
-        "page": page,
-        "per_page": per_page,
-        "total": total,
-        "pages": pages,
-        "has_prev": page > 1,
-        "has_next": page < pages,
-    }
-    return rows, meta
-
-
 def get_order(db: Session, order_id: int) -> Order:
     order = db.get(Order, order_id)
     if not order:
@@ -146,12 +73,6 @@ def get_order(db: Session, order_id: int) -> Order:
 
 
 def create_order(db: Session, data: dict) -> Order:
-    """
-    data keys:
-        customer_id, delivery_type, fulfillment_date, delivery_address, notes,
-        items: list of {product_id, quantity, customization_notes},
-        advance_paid, advance_method, order_date
-    """
     items_data = data.get("items") or []
     if not items_data:
         raise HTTPException(status_code=400, detail="An order must have at least one item")
@@ -178,13 +99,6 @@ def create_order(db: Session, data: dict) -> Order:
 
 
 def update_order(db: Session, order_id: int, data: dict) -> Order:
-    """
-    Edit an existing order. Only allowed while status == CONFIRMED.
-    - Payments already recorded are never touched.
-    - Cannot reduce the order total below what has already been paid.
-    - Every change is written to the audit log with old/new values.
-    - If an invoice has been issued, it is NOT updated (snapshot is immutable).
-    """
     order = get_order(db, order_id)
 
     if order.status != OrderStatus.CONFIRMED:
@@ -202,7 +116,6 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     if not fulfillment_date:
         raise HTTPException(status_code=400, detail="Fulfillment date is required")
 
-    # Snapshot old state for the audit log
     old_snapshot = {
         "fulfillment_date": order.fulfillment_date.isoformat() if order.fulfillment_date else None,
         "delivery_type": order.delivery_type,
@@ -216,7 +129,6 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
         ],
     }
 
-    # Compute new totals from scratch — do not mutate order.items yet
     new_line_totals: list[dict] = []
     new_total = Decimal("0.00")
     for item_data in items_data:
@@ -259,7 +171,6 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
             ),
         )
 
-    # Replace items: delete children first, then re-add
     for old_item in list(order.items):
         db.delete(old_item)
     db.flush()
@@ -267,7 +178,6 @@ def update_order(db: Session, order_id: int, data: dict) -> Order:
     for row in new_line_totals:
         db.add(OrderItem(order_id=order.id, **row))
 
-    # Update order fields
     order.fulfillment_date = fulfillment_date
     order.delivery_type = data.get("delivery_type", order.delivery_type)
     order.delivery_address = data.get("delivery_address") or None
@@ -414,6 +324,12 @@ def update_status(db: Session, order_id: int, new_status: str) -> Order:
         )
 
     old_status = order.status.value
+
+    # Deduct ingredients when production starts.
+    # Stock may go negative; the UI warns but does not block.
+    if target == OrderStatus.IN_PROGRESS and order.status == OrderStatus.CONFIRMED:
+        _deduct_for_production(db, order)
+
     order.status = target
 
     log_action(
@@ -437,10 +353,6 @@ def record_payment(
     reference: str | None,
     received_at: datetime | None = None,
 ) -> Order:
-    """
-    Record a payment. Updates balance only — never touches status.
-    Status is a fulfillment concept; payment is orthogonal.
-    """
     order = get_order(db, order_id)
 
     if order.status == OrderStatus.CANCELLED:
@@ -488,11 +400,92 @@ def record_payment(
     return order
 
 
+# --- Production deduction ---
+
+
+def _compute_needed_ingredients(db: Session, order: Order) -> dict[int, Decimal]:
+    """
+    Sum total consumption per ingredient across all items, based on
+    each item's product recipe. Same ingredient used in multiple items
+    is aggregated.
+    """
+    needed: dict[int, Decimal] = {}
+    for item in order.items:
+        recipe = recipe_service.list_recipe(db, item.product_id)
+        for line in recipe:
+            qty = line.quantity_per_unit * Decimal(item.quantity)
+            needed[line.ingredient_id] = needed.get(line.ingredient_id, Decimal("0")) + qty
+    return needed
+
+
+def check_production_shortages(db: Session, order_id: int) -> list[dict]:
+    """
+    Return ingredients that would go negative if production started now.
+    Used for a UI warning banner; does not block.
+    """
+    order = get_order(db, order_id)
+    needed = _compute_needed_ingredients(db, order)
+    if not needed:
+        return []
+
+    stocks = inventory_service.stocks_for(db, list(needed.keys()))
+    shortages = []
+    for ing_id, qty in needed.items():
+        on_hand = stocks.get(ing_id, Decimal("0"))
+        if on_hand < qty:
+            ing = db.get(Ingredient, ing_id)
+            shortages.append(
+                {
+                    "ingredient": ing,
+                    "needed": qty,
+                    "on_hand": on_hand,
+                    "shortfall": qty - on_hand,
+                }
+            )
+    return shortages
+
+
+def _deduct_for_production(db: Session, order: Order) -> None:
+    """
+    Create CONSUMPTION movements for all ingredients used by this order.
+    Movements are added to the session but NOT committed — the caller
+    commits as part of the status-change transaction.
+    """
+    needed = _compute_needed_ingredients(db, order)
+    for ing_id, qty in needed.items():
+        if qty <= 0:
+            continue
+        inventory_service.record_movement(
+            db,
+            ing_id,
+            delta=-qty,
+            reason=MovementReason.CONSUMPTION,
+            reference_type="Order",
+            reference_id=order.id,
+            notes=f"Consumed by {order.order_number}",
+            commit=False,
+        )
+
+
+def order_cogs(db: Session, order_id: int) -> Decimal:
+    """
+    Cost of goods for one order = sum of total_cost_at_time on all
+    CONSUMPTION movements with reference to this order.
+    """
+    total = db.execute(
+        select(func.coalesce(func.sum(StockMovement.total_cost_at_time), 0)).where(
+            StockMovement.reference_type == "Order",
+            StockMovement.reference_id == order_id,
+            StockMovement.reason == MovementReason.CONSUMPTION,
+        )
+    ).scalar()
+    return Decimal(str(total or 0)).quantize(Decimal("0.01"))
+
+
 # --- Helpers ---
 
 
 def _parse_dt(value):
-    """Accept datetime, ISO string, or None."""
     if value is None or value == "":
         return None
     if isinstance(value, datetime):
@@ -501,3 +494,78 @@ def _parse_dt(value):
         return datetime.fromisoformat(value)
     except (TypeError, ValueError):
         return None
+
+
+def search_orders(
+    db: Session,
+    q: str | None = None,
+    status: str = "ALL",
+    page: int = 1,
+    per_page: int = 25,
+) -> tuple[list[Order], dict]:
+    """
+    Paginated order list with optional status filter and text search.
+
+    Search matches (case-insensitive):
+      - Order number, e.g. "0007" matches "HOD-2026-0007"
+      - Customer name
+      - Customer phone, digits-only (so "99999" matches "+91 99999 99999")
+
+    Sort: fulfillment_date ASC NULLS LAST, order_date DESC.
+    """
+    from sqlalchemy import func, nullslast, or_
+
+    page = max(1, page)
+    per_page = max(1, min(per_page, 100))
+
+    conditions = []
+    if status != "ALL":
+        try:
+            status_enum = OrderStatus(status)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}") from exc
+        conditions.append(Order.status == status_enum)
+
+    if q:
+        term = f"%{q.strip()}%"
+        phone_digits = "".join(c for c in q if c.isdigit())
+        ors = [
+            Order.order_number.ilike(term),
+            Customer.name.ilike(term),
+        ]
+        if len(phone_digits) >= 3:
+            ors.append(Customer.phone.ilike(f"%{phone_digits}%"))
+        conditions.append(or_(*ors))
+
+    base = (
+        select(Order)
+        .join(Customer, Order.customer_id == Customer.id)
+        .order_by(
+            nullslast(Order.fulfillment_date.asc()),
+            Order.order_date.desc(),
+        )
+    )
+    count_q = select(func.count(Order.id)).join(Customer, Order.customer_id == Customer.id)
+    if conditions:
+        base = base.where(*conditions)
+        count_q = count_q.where(*conditions)
+
+    total = db.execute(count_q).scalar() or 0
+    pages = (total + per_page - 1) // per_page if total else 1
+    if page > pages:
+        page = pages
+    offset = (page - 1) * per_page
+
+    rows = list(db.execute(base.limit(per_page).offset(offset)).scalars().all())
+
+    meta = {
+        "q": q or "",
+        "status": status,
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": pages,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+    return rows, meta

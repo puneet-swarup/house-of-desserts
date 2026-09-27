@@ -26,6 +26,7 @@ def test_order_item_with_missing_order_rejected(db, product):
 
 def test_order_with_missing_customer_rejected(db):
     from app.models import Order
+
     o = Order(order_number="HOD-2026-9999", customer_id=999999)
     db.add(o)
     with pytest.raises(IntegrityError):

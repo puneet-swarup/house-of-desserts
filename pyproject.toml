@@ -32,6 +32,11 @@ build-backend = "setuptools.build_meta"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = [
+    "scripts",
+    "tests.backup",
+    "alembic/versions",
+]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]

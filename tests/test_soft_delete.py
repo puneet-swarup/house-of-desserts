@@ -16,6 +16,7 @@ def test_customer_phone_reusable_after_delete(db):
 
 def test_duplicate_active_phone_rejected(db):
     from fastapi import HTTPException
+
     create_customer(db, {"name": "A", "phone": "2222222222"})
     with pytest.raises(HTTPException):
         create_customer(db, {"name": "B", "phone": "2222222222"})
@@ -23,6 +24,7 @@ def test_duplicate_active_phone_rejected(db):
 
 def test_product_sku_reusable_after_delete(db):
     from decimal import Decimal
+
     p = create_product(db, {"sku": "X-1", "name": "Old", "base_price": Decimal("10.00")})
     delete_product(db, p.id)
     p2 = create_product(db, {"sku": "X-1", "name": "New", "base_price": Decimal("12.00")})

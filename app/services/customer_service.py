@@ -70,9 +70,7 @@ def search_customers(
         page = pages
 
     offset = (page - 1) * per_page
-    rows = db.execute(
-        base.order_by(Customer.name).limit(per_page).offset(offset)
-    ).scalars().all()
+    rows = db.execute(base.order_by(Customer.name).limit(per_page).offset(offset)).scalars().all()
 
     meta = {
         "q": q or "",
@@ -161,6 +159,7 @@ def soft_delete_customer(db: Session, customer_id: int) -> Customer:
 
 # --- Addresses ---
 
+
 def add_address(db: Session, customer_id: int, data: dict) -> Address:
     """
     Add an address. Rules:
@@ -210,7 +209,7 @@ def set_default_address(db: Session, customer_id: int, address_id: int) -> Addre
         raise HTTPException(status_code=404, detail="Address not found")
 
     for a in customer.addresses:
-        a.is_default = (a.id == address_id)
+        a.is_default = a.id == address_id
 
     log_action(
         db,

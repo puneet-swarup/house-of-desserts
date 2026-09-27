@@ -17,16 +17,19 @@ def test_create_customer_logged(client, db_session, sample_customer):
 
 def test_status_change_logged(client, db_session, sample_order):
     client.post(f"/orders/{sample_order.id}/status", data={"status": "IN_PROGRESS"})
-    logs = db_session.query(AuditLog).filter_by(
-        entity_type="Order", action="STATUS_CHANGE"
-    ).all()
+    logs = db_session.query(AuditLog).filter_by(entity_type="Order", action="STATUS_CHANGE").all()
     assert len(logs) >= 1
 
 
 def test_payment_logged(client, db_session, sample_order):
-    client.post(f"/orders/{sample_order.id}/payments", data={
-        "amount": "50.00", "method": "CASH", "reference": "",
-    })
+    client.post(
+        f"/orders/{sample_order.id}/payments",
+        data={
+            "amount": "50.00",
+            "method": "CASH",
+            "reference": "",
+        },
+    )
     logs = db_session.query(AuditLog).filter_by(action="PAYMENT").all()
     assert len(logs) >= 1
 

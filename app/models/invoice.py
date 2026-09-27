@@ -23,9 +23,7 @@ class Invoice(Base):
     order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), nullable=False)
 
     invoice_number: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
-    invoice_date: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    invoice_date: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
     status: Mapped[str] = mapped_column(String(10), nullable=False, default="ISSUED")
 
     business_name: Mapped[str] = mapped_column(String(200), nullable=False, default="")
@@ -41,9 +39,7 @@ class Invoice(Base):
     billed_to_address: Mapped[str] = mapped_column(Text, nullable=False, default="")
 
     order_number: Mapped[str] = mapped_column(String(20), nullable=False, default="")
-    order_date: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=utcnow
-    )
+    order_date: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
     fulfillment_date: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     delivery_type: Mapped[str] = mapped_column(String(10), nullable=False, default="PICKUP")
@@ -68,9 +64,7 @@ class Invoice(Base):
     line_items_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     pdf_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     order: Mapped[Order] = relationship(lazy="joined")
 

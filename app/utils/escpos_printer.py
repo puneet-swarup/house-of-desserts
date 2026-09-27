@@ -153,9 +153,18 @@ def print_receipt_snapshot(invoice, items: list[dict]) -> None:
     printer.close()
 
 
-def print_receipt(order, customer, items, total, gst_total, advance, balance,
-                  invoice_number: str, delivery_type: str,
-                  delivery_address: str = "") -> None:
+def print_receipt(
+    order,
+    customer,
+    items,
+    total,
+    gst_total,
+    advance,
+    balance,
+    invoice_number: str,
+    delivery_type: str,
+    delivery_address: str = "",
+) -> None:
     """
     Legacy: prints from live objects. Kept for backwards compatibility.
     New code should build a snapshot via create_invoice() and call
@@ -196,7 +205,9 @@ def print_receipt(order, customer, items, total, gst_total, advance, balance,
         if len(name) > max_name:
             name = name[: max_name - 1] + "."
         if width >= 48:
-            printer.text(f"{name:<28}{item.quantity:>4}{item.unit_price:>8.2f}{item.line_total:>8.2f}\n")
+            printer.text(
+                f"{name:<28}{item.quantity:>4}{item.unit_price:>8.2f}{item.line_total:>8.2f}\n"
+            )
         else:
             printer.text(f"{name:<20}{item.quantity:>3}{item.line_total:>9.2f}\n")
         if item.customization_notes:

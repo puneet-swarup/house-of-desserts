@@ -53,6 +53,27 @@
         </div>
     </div>
 
+    {% if shortages %}
+    <div class="alert alert-warning">
+        <div>
+            <p class="font-semibold">⚠️ Starting production will take these ingredients negative:</p>
+            <ul class="list-disc list-inside text-sm mt-1 space-y-0.5">
+                {% for s in shortages %}
+                <li>
+                    <strong>{{ s.ingredient.name }}</strong> —
+                    need {{ s.needed }} {{ s.ingredient.unit }},
+                    have {{ s.on_hand }} {{ s.ingredient.unit }},
+                    short by <strong>{{ s.shortfall }} {{ s.ingredient.unit }}</strong>
+                </li>
+                {% endfor %}
+            </ul>
+            <p class="text-xs mt-2 opacity-70">
+                You can still start production. Stock will go negative until you record a purchase.
+            </p>
+        </div>
+    </div>
+    {% endif %}
+
     <div class="card bg-base-100 shadow-sm">
         <div class="card-body">
             <h2 class="text-sm font-semibold text-base-content/50 uppercase">Items</h2>

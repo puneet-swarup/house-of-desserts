@@ -43,6 +43,7 @@ from app.models import (  # noqa: F401 — register all models with metadata
 # Engine + session
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def engine():
     eng = create_engine(
@@ -85,6 +86,7 @@ def db_session(db):
 # HTTP TestClient — overrides get_db to use the test session
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def client(engine):
     from fastapi.testclient import TestClient
@@ -109,6 +111,7 @@ def client(engine):
 # ---------------------------------------------------------------------------
 # Minimal domain fixtures (direct, no service) — for pure unit tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def customer(db):
@@ -137,6 +140,7 @@ def product(db):
 # Full-service fixtures used by existing HTTP tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def sample_customer(db):
     """
@@ -146,18 +150,25 @@ def sample_customer(db):
     """
     from app.services.customer_service import add_address, create_customer
 
-    c = create_customer(db, {
-        "name": "Test Customer",
-        "phone": "+91 99999 99999",
-        "email": "test@example.com",
-        "notes": "",
-    })
-    add_address(db, c.id, {
-        "label": "Home",
-        "line": "123 Test Street, Test City",
-        "is_default": True,
-        "is_active": True,
-    })
+    c = create_customer(
+        db,
+        {
+            "name": "Test Customer",
+            "phone": "+91 99999 99999",
+            "email": "test@example.com",
+            "notes": "",
+        },
+    )
+    add_address(
+        db,
+        c.id,
+        {
+            "label": "Home",
+            "line": "123 Test Street, Test City",
+            "is_default": True,
+            "is_active": True,
+        },
+    )
     db.refresh(c)
     return c
 
@@ -167,14 +178,17 @@ def sample_product(db):
     """Creates a product via the service layer so audit is logged."""
     from app.services.product_service import create_product
 
-    return create_product(db, {
-        "sku": "SAMPLE-001",
-        "name": "Sample Cake",
-        "base_price": Decimal("500.00"),
-        "gst_rate": Decimal("5.00"),
-        "category": "Cake",
-        "prep_time_hours": 4,
-    })
+    return create_product(
+        db,
+        {
+            "sku": "SAMPLE-001",
+            "name": "Sample Cake",
+            "base_price": Decimal("500.00"),
+            "gst_rate": Decimal("5.00"),
+            "category": "Cake",
+            "prep_time_hours": 4,
+        },
+    )
 
 
 @pytest.fixture()
@@ -183,10 +197,13 @@ def sample_order(db, sample_customer, sample_product):
 
     from app.services.order_service import create_order
 
-    return create_order(db, {
-        "customer_id": sample_customer.id,
-        "items": [{"product_id": sample_product.id, "quantity": 1}],
-        "delivery_type": "DELIVERY",
-        "delivery_address": "123 Test Street, Test City",
-        "fulfillment_date": (datetime.now() + timedelta(days=1)).isoformat(),
-    })
+    return create_order(
+        db,
+        {
+            "customer_id": sample_customer.id,
+            "items": [{"product_id": sample_product.id, "quantity": 1}],
+            "delivery_type": "DELIVERY",
+            "delivery_address": "123 Test Street, Test City",
+            "fulfillment_date": (datetime.now() + timedelta(days=1)).isoformat(),
+        },
+    )

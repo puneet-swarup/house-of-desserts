@@ -196,6 +196,7 @@ def record_movement(
     reference_type: str | None = None,
     reference_id: int | None = None,
     notes: str | None = None,
+    commit: bool = True,
 ) -> StockMovement:
     """
     Append a stock movement and (for purchases) update the ingredient's
@@ -205,6 +206,9 @@ def record_movement(
       PURCHASE, RETURN → delta must be positive
       CONSUMPTION, WASTAGE → delta must be negative
       ADJUSTMENT → either sign accepted
+
+    Set commit=False when batching movements inside a larger transaction;
+    the caller is then responsible for committing.
     """
     ing = get_ingredient(db, ingredient_id)
 
@@ -224,9 +228,8 @@ def record_movement(
         raise HTTPException(status_code=400, detail=f"{reason_e.value} must have a negative delta")
 
     cost = Decimal(str(unit_cost)) if unit_cost is not None else ing.cost_per_unit
-    total_cost = cost * delta_d
+    total_cost = cost * abs(delta_d)
 
-    # Compute prior stock BEFORE adding this movement
     old_stock = on_hand(db, ingredient_id)
 
     movement = StockMovement(
@@ -242,7 +245,6 @@ def record_movement(
     db.add(movement)
     db.flush()
 
-    # Weighted-average cost update on purchases
     if reason_e == MovementReason.PURCHASE and delta_d > 0:
         new_stock = old_stock + delta_d
         if new_stock > 0:
@@ -262,8 +264,10 @@ def record_movement(
             "total_cost": str(total_cost),
         },
     )
-    db.commit()
-    db.refresh(movement)
+
+    if commit:
+        db.commit()
+        db.refresh(movement)
     return movement
 
 

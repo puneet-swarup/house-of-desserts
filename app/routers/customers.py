@@ -25,6 +25,7 @@ router = APIRouter()
 # CUSTOMER ROUTES
 # ============================================================
 
+
 @router.get("/", response_class=HTMLResponse)
 def list_page(
     request: Request,
@@ -162,9 +163,7 @@ async def create(request: Request, db: Session = Depends(get_db)):
             status_code=400,
         )
 
-    _process_new_addresses(
-        db, customer.id, addr_new_labels, addr_new_lines, addr_new_defaults
-    )
+    _process_new_addresses(db, customer.id, addr_new_labels, addr_new_lines, addr_new_defaults)
     return RedirectResponse(url="/customers", status_code=303)
 
 
@@ -220,9 +219,7 @@ async def update(request: Request, customer_id: int, db: Session = Depends(get_d
         )
 
     _process_edited_addresses(db, customer_id, dict(form))
-    _process_new_addresses(
-        db, customer_id, addr_new_labels, addr_new_lines, addr_new_defaults
-    )
+    _process_new_addresses(db, customer_id, addr_new_labels, addr_new_lines, addr_new_defaults)
     return RedirectResponse(url=f"/customers/{customer_id}", status_code=303)
 
 
@@ -235,6 +232,7 @@ def delete_customer(customer_id: int, db: Session = Depends(get_db)):
 # ============================================================
 # ADDRESS AJAX ROUTES
 # ============================================================
+
 
 @router.post("/{customer_id}/addresses/{addr_id}/set-default")
 def set_default_address(customer_id: int, addr_id: int, db: Session = Depends(get_db)):
@@ -264,6 +262,7 @@ def soft_delete_address(customer_id: int, addr_id: int, db: Session = Depends(ge
 # ============================================================
 # HELPERS
 # ============================================================
+
 
 def _process_new_addresses(db, customer_id, labels, lines, defaults):
     """

@@ -252,6 +252,11 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
 
     whatsapp_messages = messages_for_order(order)
 
+    # Only compute shortages when the next move could be IN_PROGRESS
+    shortages = []
+    if order.status.value == "CONFIRMED":
+        shortages = order_service.check_production_shortages(db, order_id)
+
     return templates.TemplateResponse(
         request=request,
         name="orders/detail.html",
@@ -259,6 +264,7 @@ def order_detail(request: Request, order_id: int, db: Session = Depends(get_db))
             "settings": settings,
             "order": order,
             "whatsapp_messages": whatsapp_messages,
+            "shortages": shortages,
         },
     )
 

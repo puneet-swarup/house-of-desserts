@@ -26,9 +26,7 @@ class Payment(Base):
     method: Mapped[str] = mapped_column(String(20), nullable=False, default="CASH")
     reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     order: Mapped[Order] = relationship(back_populates="payments")
 

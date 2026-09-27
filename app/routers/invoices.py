@@ -21,16 +21,18 @@ def _deserialize_items(invoice) -> list[dict]:
     raw = json.loads(invoice.line_items_json or "[]")
     out = []
     for r in raw:
-        out.append({
-            "product_name": r.get("product_name", ""),
-            "sku": r.get("sku", ""),
-            "quantity": r.get("quantity", 0),
-            "unit_price": Decimal(r.get("unit_price", "0")),
-            "gst_rate": Decimal(r.get("gst_rate", "0")),
-            "gst_amount": Decimal(r.get("gst_amount", "0")),
-            "line_total": Decimal(r.get("line_total", "0")),
-            "customization_notes": r.get("customization_notes", ""),
-        })
+        out.append(
+            {
+                "product_name": r.get("product_name", ""),
+                "sku": r.get("sku", ""),
+                "quantity": r.get("quantity", 0),
+                "unit_price": Decimal(r.get("unit_price", "0")),
+                "gst_rate": Decimal(r.get("gst_rate", "0")),
+                "gst_amount": Decimal(r.get("gst_amount", "0")),
+                "line_total": Decimal(r.get("line_total", "0")),
+                "customization_notes": r.get("customization_notes", ""),
+            }
+        )
     return out
 
 

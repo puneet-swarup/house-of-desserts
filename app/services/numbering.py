@@ -37,9 +37,7 @@ def next_invoice_number(db: Session) -> str:
 def _next(db: Session, kind: str) -> str:
     prefix = _prefix(kind)
     row = db.execute(
-        select(NumberSequence)
-        .where(NumberSequence.prefix == prefix)
-        .with_for_update()
+        select(NumberSequence).where(NumberSequence.prefix == prefix).with_for_update()
     ).scalar_one_or_none()
 
     if row is None:

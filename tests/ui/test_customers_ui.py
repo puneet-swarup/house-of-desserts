@@ -32,7 +32,9 @@ def test_customer_search_by_name(app_page, seeded, live_server):
     app_page.fill('input[name="q"]', "UI Customer")
     app_page.click('button[type="submit"]')
 
-    expect(app_page.locator(f"td:has-text('{seeded['customer_name']}')")).to_be_visible(timeout=8000)
+    expect(app_page.locator(f"td:has-text('{seeded['customer_name']}')")).to_be_visible(
+        timeout=8000
+    )
 
 
 def test_customer_search_empty_state(app_page, seeded, live_server):

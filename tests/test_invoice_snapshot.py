@@ -7,11 +7,14 @@ from app.services.order_service import create_order
 
 
 def test_invoice_snapshot_survives_order_edit(db, customer, product):
-    o = create_order(db, {
-        "customer_id": customer.id,
-        "fulfillment_date": "2026-12-31T12:00",
-        "items": [{"product_id": product.id, "quantity": 2}],
-    })
+    o = create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "fulfillment_date": "2026-12-31T12:00",
+            "items": [{"product_id": product.id, "quantity": 2}],
+        },
+    )
     inv = create_invoice(db, o.id)
     frozen_total = inv.total_amount
     frozen_items = inv.line_items_json
@@ -27,11 +30,14 @@ def test_invoice_snapshot_survives_order_edit(db, customer, product):
 
 
 def test_invoice_snapshot_survives_customer_rename(db, customer, product):
-    o = create_order(db, {
-        "customer_id": customer.id,
-        "fulfillment_date": "2026-12-31T12:00",
-        "items": [{"product_id": product.id, "quantity": 1}],
-    })
+    o = create_order(
+        db,
+        {
+            "customer_id": customer.id,
+            "fulfillment_date": "2026-12-31T12:00",
+            "items": [{"product_id": product.id, "quantity": 1}],
+        },
+    )
     inv = create_invoice(db, o.id)
     old_name = inv.billed_to_name
 

@@ -128,9 +128,7 @@ def delete_product(db: Session, product_id: int) -> None:
     db.commit()
 
 
-def is_sku_available(
-    db: Session, sku: str, *, exclude_product_id: int | None = None
-) -> bool:
+def is_sku_available(db: Session, sku: str, *, exclude_product_id: int | None = None) -> bool:
     """For the live on-the-fly SKU check in the form."""
     try:
         normalized = validate_sku_format(sku)

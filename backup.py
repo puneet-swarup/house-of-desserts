@@ -5,7 +5,6 @@ Keeps last 7 backups, deletes older ones.
 """
 
 import sqlite3
-import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -17,10 +16,12 @@ LOG_FILE = Path(__file__).parent / "backups" / "backup.log"
 # Ensure backup dir exists
 BACKUP_DIR.mkdir(exist_ok=True)
 
+
 def log(msg):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(LOG_FILE, "a") as f:
         f.write(f"[{timestamp}] {msg}\n")
+
 
 def main():
     if not DB_PATH.exists():
@@ -52,6 +53,7 @@ def main():
 
     except Exception as e:
         log(f"ERROR: {e}")
+
 
 if __name__ == "__main__":
     main()

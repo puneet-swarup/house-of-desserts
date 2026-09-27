@@ -23,12 +23,8 @@ class AuditLog(Base):
     old_value: Mapped[str | None] = mapped_column(Text, nullable=True)
     new_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    changed_by: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="system"
-    )
-    changed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    changed_by: Mapped[str] = mapped_column(String(50), nullable=False, default="system")
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
     __table_args__ = (
         Index("ix_audit_log_entity", "entity_type", "entity_id"),

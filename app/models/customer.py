@@ -26,13 +26,9 @@ class Customer(Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=utcnow, nullable=False
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, nullable=False)
 
-    orders: Mapped[list[Order]] = relationship(
-        back_populates="customer", lazy="select"
-    )
+    orders: Mapped[list[Order]] = relationship(back_populates="customer", lazy="select")
     addresses: Mapped[list[Address]] = relationship(
         back_populates="customer",
         lazy="selectin",

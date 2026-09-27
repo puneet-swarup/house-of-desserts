@@ -33,9 +33,7 @@ def _pdf_dir() -> Path:
 
 
 def create_invoice(db: Session, order_id: int) -> Invoice:
-    existing = db.execute(
-        select(Invoice).where(Invoice.order_id == order_id)
-    ).scalar_one_or_none()
+    existing = db.execute(select(Invoice).where(Invoice.order_id == order_id)).scalar_one_or_none()
     if existing:
         return existing
 
@@ -75,46 +73,43 @@ def _build_invoice(db: Session, order: Order) -> Invoice:
     for item in order.items:
         gst_total += money(item.gst_amount)
         subtotal += money(item.unit_price * Decimal(item.quantity))
-        items_snapshot.append({
-            "product_name": item.product.name,
-            "sku": item.product.sku,
-            "quantity": item.quantity,
-            "unit_price": str(item.unit_price),
-            "gst_rate": str(item.gst_rate),
-            "gst_amount": str(item.gst_amount),
-            "line_total": str(item.line_total),
-            "customization_notes": item.customization_notes or "",
-        })
+        items_snapshot.append(
+            {
+                "product_name": item.product.name,
+                "sku": item.product.sku,
+                "quantity": item.quantity,
+                "unit_price": str(item.unit_price),
+                "gst_rate": str(item.gst_rate),
+                "gst_amount": str(item.gst_amount),
+                "line_total": str(item.line_total),
+                "customization_notes": item.customization_notes or "",
+            }
+        )
 
     invoice = Invoice(
         order_id=order.id,
         invoice_number=next_invoice_number(db),
         status="ISSUED",
-
         business_name=settings.app_name,
         business_address=settings.address,
         business_phone=settings.phone,
         business_email=settings.email,
         business_gstin=settings.gstin,
         business_fssai=settings.fssai_number,
-
         billed_to_name=customer.name,
         billed_to_phone=customer.phone,
         billed_to_email=customer.email or "",
         billed_to_address=default_addr.line if default_addr else "",
-
         order_number=order.order_number,
         order_date=order.order_date,
         fulfillment_date=order.fulfillment_date,
         delivery_type=order.delivery_type,
         delivery_address=order.delivery_address or "",
-
         subtotal=money(subtotal),
         gst_total=money(gst_total),
         total_amount=money(order.total_amount),
         advance_paid=money(order.advance_paid),
         balance_due=money(order.balance_due),
-
         line_items_json=json.dumps(items_snapshot),
     )
     db.add(invoice)
@@ -130,9 +125,7 @@ def get_invoice(db: Session, invoice_id: int) -> Invoice:
 
 
 def get_invoice_for_order(db: Session, order_id: int) -> Invoice | None:
-    return db.execute(
-        select(Invoice).where(Invoice.order_id == order_id)
-    ).scalar_one_or_none()
+    return db.execute(select(Invoice).where(Invoice.order_id == order_id)).scalar_one_or_none()
 
 
 def _currency(amount: Decimal, symbol: str | None = None) -> str:
@@ -179,7 +172,13 @@ def generate_pdf(db: Session, order_id: int) -> str:
     pdf.cell(0, 7, "TAX INVOICE", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.set_font(font, "", 10)
     pdf.cell(0, 5, f"Invoice #: {invoice.invoice_number}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-    pdf.cell(0, 5, f"Date: {invoice.invoice_date.strftime('%d %b %Y')}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(
+        0,
+        5,
+        f"Date: {invoice.invoice_date.strftime('%d %b %Y')}",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+    )
     pdf.cell(0, 5, f"Order #: {invoice.order_number}", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     pdf.ln(3)
 
@@ -205,8 +204,13 @@ def generate_pdf(db: Session, order_id: int) -> str:
         pdf.cell(0, 5, "PICKUP", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
     if invoice.fulfillment_date:
         pdf.set_font(font, "", 10)
-        pdf.cell(0, 5, f"Ready by: {invoice.fulfillment_date.strftime('%d %b %Y, %H:%M')}",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(
+            0,
+            5,
+            f"Ready by: {invoice.fulfillment_date.strftime('%d %b %Y, %H:%M')}",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
     pdf.ln(3)
 
     # --- Items (no HSN column) ---
@@ -233,12 +237,20 @@ def generate_pdf(db: Session, order_id: int) -> str:
         pdf.cell(26, 6, _currency(Decimal(it["unit_price"]), sym), border=1, align="R")
         if show_gst:
             pdf.cell(22, 6, _currency(Decimal(it["gst_amount"]), sym), border=1, align="R")
-        pdf.cell(26, 6, _currency(Decimal(it["line_total"]), sym), border=1, align="R",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(
+            26,
+            6,
+            _currency(Decimal(it["line_total"]), sym),
+            border=1,
+            align="R",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
         if it.get("customization_notes"):
             pdf.cell(8, 5, "")
-            pdf.cell(0, 5, f"  Note: {it['customization_notes']}",
-                     new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+            pdf.cell(
+                0, 5, f"  Note: {it['customization_notes']}", new_x=XPos.LMARGIN, new_y=YPos.NEXT
+            )
 
     pdf.ln(5)
 
@@ -246,46 +258,64 @@ def generate_pdf(db: Session, order_id: int) -> str:
     pdf.set_font(font, "", 10)
     pdf.cell(130, 6, "")
     pdf.cell(35, 6, "Subtotal:", align="R")
-    pdf.cell(35, 6, _currency(invoice.subtotal, sym), align="R",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(
+        35, 6, _currency(invoice.subtotal, sym), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT
+    )
 
     if invoice.business_gstin and invoice.gst_total > 0:
         cgst, sgst = split_gst(invoice.gst_total)
         pdf.cell(165, 6, "CGST:", align="R")
-        pdf.cell(35, 6, _currency(cgst, sym), align="R",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(35, 6, _currency(cgst, sym), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.cell(165, 6, "SGST:", align="R")
-        pdf.cell(35, 6, _currency(sgst, sym), align="R",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(35, 6, _currency(sgst, sym), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     pdf.set_font(font, "B", 11)
     pdf.cell(165, 7, "TOTAL:", align="R")
-    pdf.cell(35, 7, _currency(invoice.total_amount, sym), align="R",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(
+        35, 7, _currency(invoice.total_amount, sym), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT
+    )
 
     pdf.set_font(font, "", 10)
     pdf.cell(165, 6, "Paid:", align="R")
-    pdf.cell(35, 6, _currency(invoice.advance_paid, sym), align="R",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+    pdf.cell(
+        35, 6, _currency(invoice.advance_paid, sym), align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT
+    )
 
     if invoice.balance_due > 0:
         pdf.set_font(font, "B", 10)
         pdf.cell(165, 6, "Balance Due:", align="R")
-        pdf.cell(35, 6, _currency(invoice.balance_due, sym), align="R",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(
+            35,
+            6,
+            _currency(invoice.balance_due, sym),
+            align="R",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+        )
     else:
         pdf.cell(165, 6, "Status:", align="R")
         pdf.set_font(font, "B", 10)
-        pdf.cell(35, 6, "PAID IN FULL", align="R",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.cell(35, 6, "PAID IN FULL", align="R", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
     pdf.ln(10)
     pdf.set_font(font, "", 8)
-    pdf.cell(0, 5, "This is a computer-generated invoice. No signature required.",
-             new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+    pdf.cell(
+        0,
+        5,
+        "This is a computer-generated invoice. No signature required.",
+        new_x=XPos.LMARGIN,
+        new_y=YPos.NEXT,
+        align="C",
+    )
     if invoice.business_phone:
-        pdf.cell(0, 5, f"For queries: {invoice.business_phone} | {invoice.business_name}",
-                 new_x=XPos.LMARGIN, new_y=YPos.NEXT, align="C")
+        pdf.cell(
+            0,
+            5,
+            f"For queries: {invoice.business_phone} | {invoice.business_name}",
+            new_x=XPos.LMARGIN,
+            new_y=YPos.NEXT,
+            align="C",
+        )
 
     out_path = _pdf_dir() / f"{invoice.invoice_number}.pdf"
     pdf.output(str(out_path))

@@ -12,24 +12,24 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 
+# Import our settings to get the DB URL
+from app.config import get_settings
+
 # Import our Base (the "parent" of all our ORM models)
 from app.database import Base
 
 # Import ALL models so Alembic can see every table definition.
 # Without these imports, autogenerate won't detect your tables.
 from app.models import (  # noqa: F401
+    Address,
+    AuditLog,
     Customer,
-    Product,
+    Invoice,
     Order,
     OrderItem,
     Payment,
-    Invoice,
-    AuditLog,
-    Address,
+    Product,
 )
-
-# Import our settings to get the DB URL
-from app.config import get_settings
 
 settings = get_settings()
 

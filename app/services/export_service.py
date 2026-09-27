@@ -30,42 +30,57 @@ def _bounds(start_date: str, end_date: str) -> tuple[datetime, datetime]:
 def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
     start, end = _bounds(start_date, end_date)
 
-    orders = db.execute(
-        select(Order)
-        .options(selectinload(Order.items), selectinload(Order.customer))
-        .where(Order.order_date >= start, Order.order_date <= end)
-        .where(Order.status != OrderStatus.CANCELLED)
-        .order_by(Order.order_date)
-    ).scalars().all()
+    orders = (
+        db.execute(
+            select(Order)
+            .options(selectinload(Order.items), selectinload(Order.customer))
+            .where(Order.order_date >= start, Order.order_date <= end)
+            .where(Order.status != OrderStatus.CANCELLED)
+            .order_by(Order.order_date)
+        )
+        .scalars()
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "Order Number", "Date", "Customer", "Phone", "Status",
-        "Delivery Type", "Subtotal", "GST Amount", "Total",
-        "Advance Paid", "Balance Due", "Items",
-    ])
+    writer.writerow(
+        [
+            "Order Number",
+            "Date",
+            "Customer",
+            "Phone",
+            "Status",
+            "Delivery Type",
+            "Subtotal",
+            "GST Amount",
+            "Total",
+            "Advance Paid",
+            "Balance Due",
+            "Items",
+        ]
+    )
 
     for order in orders:
         gst_total = sum((money(i.gst_amount) for i in order.items), Decimal("0.00"))
         subtotal = money(order.total_amount - gst_total)
-        items_str = "; ".join(
-            f"{i.product.name} x{i.quantity}" for i in order.items
+        items_str = "; ".join(f"{i.product.name} x{i.quantity}" for i in order.items)
+        writer.writerow(
+            [
+                order.order_number,
+                order.order_date.strftime("%Y-%m-%d %H:%M"),
+                order.customer.name,
+                order.customer.phone,
+                order.status.value,
+                order.delivery_type,
+                f"{subtotal:.2f}",
+                f"{gst_total:.2f}",
+                f"{money(order.total_amount):.2f}",
+                f"{money(order.advance_paid):.2f}",
+                f"{money(order.balance_due):.2f}",
+                items_str,
+            ]
         )
-        writer.writerow([
-            order.order_number,
-            order.order_date.strftime("%Y-%m-%d %H:%M"),
-            order.customer.name,
-            order.customer.phone,
-            order.status.value,
-            order.delivery_type,
-            f"{subtotal:.2f}",
-            f"{gst_total:.2f}",
-            f"{money(order.total_amount):.2f}",
-            f"{money(order.advance_paid):.2f}",
-            f"{money(order.balance_due):.2f}",
-            items_str,
-        ])
 
     return f"orders_{start_date}_to_{end_date}.csv", output.getvalue()
 
@@ -73,34 +88,47 @@ def export_orders_csv(db: Session, start_date: str, end_date: str) -> tuple[str,
 def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
     start, end = _bounds(start_date, end_date)
 
-    orders = db.execute(
-        select(Order)
-        .options(selectinload(Order.payments), selectinload(Order.customer))
-        .where(Order.order_date >= start, Order.order_date <= end)
-        .order_by(Order.order_date)
-    ).scalars().all()
+    orders = (
+        db.execute(
+            select(Order)
+            .options(selectinload(Order.payments), selectinload(Order.customer))
+            .where(Order.order_date >= start, Order.order_date <= end)
+            .order_by(Order.order_date)
+        )
+        .scalars()
+        .all()
+    )
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow([
-        "Order Number", "Customer", "Payment Date", "Amount",
-        "Method", "Reference", "Running Total Paid",
-    ])
+    writer.writerow(
+        [
+            "Order Number",
+            "Customer",
+            "Payment Date",
+            "Amount",
+            "Method",
+            "Reference",
+            "Running Total Paid",
+        ]
+    )
 
     for order in orders:
         running = Decimal("0.00")
         for p in order.payments:
             if start <= p.received_at <= end:
                 running += money(p.amount)
-                writer.writerow([
-                    order.order_number,
-                    order.customer.name,
-                    p.received_at.strftime("%Y-%m-%d %H:%M"),
-                    f"{money(p.amount):.2f}",
-                    p.method,
-                    p.reference or "",
-                    f"{running:.2f}",
-                ])
+                writer.writerow(
+                    [
+                        order.order_number,
+                        order.customer.name,
+                        p.received_at.strftime("%Y-%m-%d %H:%M"),
+                        f"{money(p.amount):.2f}",
+                        p.method,
+                        p.reference or "",
+                        f"{running:.2f}",
+                    ]
+                )
 
     return f"payments_{start_date}_to_{end_date}.csv", output.getvalue()
 
@@ -108,12 +136,16 @@ def export_payments_csv(db: Session, start_date: str, end_date: str) -> tuple[st
 def export_summary_json(db: Session, start_date: str, end_date: str) -> tuple[str, str]:
     start, end = _bounds(start_date, end_date)
 
-    orders = db.execute(
-        select(Order)
-        .options(selectinload(Order.items))
-        .where(Order.order_date >= start, Order.order_date <= end)
-        .where(Order.status != OrderStatus.CANCELLED)
-    ).scalars().all()
+    orders = (
+        db.execute(
+            select(Order)
+            .options(selectinload(Order.items))
+            .where(Order.order_date >= start, Order.order_date <= end)
+            .where(Order.status != OrderStatus.CANCELLED)
+        )
+        .scalars()
+        .all()
+    )
 
     total_revenue = sum((money(o.total_amount) for o in orders), Decimal("0.00"))
     total_gst = sum(

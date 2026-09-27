@@ -4,7 +4,6 @@ edits rather than full-file replacements. Safe to run twice.
 """
 
 import ast
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -91,8 +90,7 @@ def main() -> None:
         "    fpdf_available = False"
     )
     new_block = (
-        "import importlib.util\n"
-        "fpdf_available = importlib.util.find_spec('fpdf') is not None"
+        "import importlib.util\n" "fpdf_available = importlib.util.find_spec('fpdf') is not None"
     )
     replace_in_file(ROOT / "tests/test_invoices.py", old_block, new_block)
 

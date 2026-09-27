@@ -21,19 +21,19 @@ def clean_python(path: Path) -> None:
     original = text
 
     # 1. dict literal lines:   "hsn_code": "1905",
-    text = re.sub(r'^\s*"hsn_code"\s*:\s*[^\n]*,?\s*\n', '', text, flags=re.MULTILINE)
-    text = re.sub(r"^\s*'hsn_code'\s*:\s*[^\n]*,?\s*\n", '', text, flags=re.MULTILINE)
+    text = re.sub(r'^\s*"hsn_code"\s*:\s*[^\n]*,?\s*\n', "", text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*'hsn_code'\s*:\s*[^\n]*,?\s*\n", "", text, flags=re.MULTILINE)
 
     # 2. kwarg lines:          hsn_code=...,  (at start of a line, indented)
-    text = re.sub(r'^\s*hsn_code\s*=\s*[^\n]*,?\s*\n', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^\s*hsn_code\s*=\s*[^\n]*,?\s*\n", "", text, flags=re.MULTILINE)
 
     # 3. inline kwargs:        , hsn_code=...,   or  hsn_code=...,  mid-line
-    text = re.sub(r',\s*hsn_code\s*=\s*[^,)\n]+', '', text)
-    text = re.sub(r'(?<!["\'])hsn_code\s*=\s*[^,)\n]+\s*,\s*', '', text)
+    text = re.sub(r",\s*hsn_code\s*=\s*[^,)\n]+", "", text)
+    text = re.sub(r'(?<!["\'])hsn_code\s*=\s*[^,)\n]+\s*,\s*', "", text)
 
     # 4. attribute access:     product.hsn_code   (in non-test code)
     #    Do not remove from strings — those we handle in HTML pass.
-    text = re.sub(r'\.hsn_code\b', '.sku', text)
+    text = re.sub(r"\.hsn_code\b", ".sku", text)
 
     # 5. dict access:          it["hsn_code"]  /  it['hsn_code']
     text = re.sub(r'\[\s*["\']hsn_code["\']\s*\]', '["sku"]', text)
@@ -48,22 +48,26 @@ def clean_html(path: Path) -> None:
     original = text
 
     # Remove <th ...>HSN</th> (with surrounding whitespace)
-    text = re.sub(r'\s*<th[^>]*>\s*HSN\s*</th>\s*', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*<th[^>]*>\s*HSN\s*</th>\s*", "\n", text, flags=re.IGNORECASE)
 
     # Remove <td ...>{{ item.hsn_code }}</td> or similar
     text = re.sub(
-        r'\s*<td[^>]*>\s*\{\{[^}]*hsn_code[^}]*\}\}\s*</td>\s*',
-        '\n', text, flags=re.IGNORECASE,
+        r"\s*<td[^>]*>\s*\{\{[^}]*hsn_code[^}]*\}\}\s*</td>\s*",
+        "\n",
+        text,
+        flags=re.IGNORECASE,
     )
 
     # Remove HSN badges: <span ...>HSN: {{ ... }}</span>
     text = re.sub(
-        r'\s*<span[^>]*>\s*HSN:\s*\{\{[^}]*\}\}\s*</span>\s*', '', text,
+        r"\s*<span[^>]*>\s*HSN:\s*\{\{[^}]*\}\}\s*</span>\s*",
+        "",
+        text,
         flags=re.IGNORECASE,
     )
 
     # Any remaining `hsn_code` interpolation left alone? Remove the whole line.
-    text = re.sub(r'^.*hsn_code.*\n', '', text, flags=re.MULTILINE)
+    text = re.sub(r"^.*hsn_code.*\n", "", text, flags=re.MULTILINE)
 
     if text != original:
         path.write_text(text, encoding="utf-8")

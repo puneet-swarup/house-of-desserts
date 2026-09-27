@@ -31,7 +31,9 @@ def slugify(name: str) -> str:
     return s or "PROD"
 
 
-def normalize_measure(value: Decimal | float | int | None, unit: str | None) -> tuple[Decimal | None, str | None]:
+def normalize_measure(
+    value: Decimal | float | int | None, unit: str | None
+) -> tuple[Decimal | None, str | None]:
     """
     Normalize (value, unit) to a canonical (value, unit).
 
