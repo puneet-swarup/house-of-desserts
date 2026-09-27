@@ -7,26 +7,48 @@ Runs on a free-tier cloud VM, reachable from any device via Tailscale.
 
 ## What it does
 
-- **Order lifecycle** — INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID (terminal), or CANCELLED (terminal). Illegal transitions rejected.
-- **Edit orders** — while CONFIRMED, with audit trail, guarded so the total can't drop below what's already been paid.
-- **Today page** — dispatch list (orders fulfilling today, sorted by time) plus production needs aggregated by SKU across the next 7 days.
-- **Customers** — multiple addresses, one default, search by name or phone, paginated.
-- **Products** — SKU auto-generated from name + weight + pack, editable, live uniqueness check, weight/volume and pack size support, soft delete.
-- **Orders** — search by order number, customer name, or phone; paginate; filter by status.
-- **Payments** — partial payments tracked separately from fulfillment. Two badges everywhere: fulfillment state and payment state.
-- **Invoices** — immutable snapshot at issue time. Sequential numbering. PDF export (fpdf2) and thermal receipt (ESC/POS).
-- **WhatsApp links** — one-tap messages to customers, configurable templates, no API keys needed.
-- **Monthly reports** — PDF and CSV summaries, generated manually or automatically on the 1st of the month.
-- **Exports** — CSV and JSON for tax filing.
-- **Audit log** — append-only, written in the same transaction as the mutation it describes.
-- **Backups** — nightly local (30-day retention) and offsite to Google Drive via rclone.
+**Orders and customers**
+- Full lifecycle: INQUIRY → CONFIRMED → IN_PROGRESS → READY → DELIVERED → PAID, or CANCELLED
+- Edit while CONFIRMED, with audit trail and a floor guard against reducing below paid
+- Search by order number, customer name, or phone
+- Today page: dispatch list (orders fulfilling today, sorted by time) + production needs aggregated by SKU across the next 7 days
+
+**Products and recipes**
+- SKU auto-generated from name + weight + pack, editable, live uniqueness check
+- Weight/volume and pack size support
+- Recipe = ingredient BOM per SKU. Cost and capacity computed live from ingredient stock
+- Unit conversion across mass (g ↔ kg) and volume (ml ↔ l). Count units (`pcs`, `packets`) are each their own group
+
+**Inventory**
+- Append-only stock movement ledger. Stock is a sum, never a stored balance
+- Movements: PURCHASE, CONSUMPTION, WASTAGE, RETURN, ADJUSTMENT
+- Opening stock at ingredient creation
+- Auto-deduction on order IN_PROGRESS, per recipe
+- Shortage warnings before starting production (does not block)
+- Cancel-from-IN_PROGRESS with salvage (return stock) or waste
+- Per-order COGS captured at consumption time, immune to future price changes
+- Low-stock alert card on Today
+- Weighted-average ingredient cost, updated on every purchase
+
+**Money and documents**
+- Payments tracked separately from fulfillment — two independent states
+- Invoices are immutable snapshots. Editing the order does not change the invoice
+- Sequential invoice numbering from a gapless sequence table
+- Monthly reports (PDF + CSV): revenue, GST, COGS, gross margin, top products with unit economics, itemized orders
+- Automatic report generation on the 1st of each month
+
+**Operations**
+- WhatsApp links (configurable templates, no API keys)
+- Audit log: append-only, written in the same transaction as the mutation
+- Nightly backups: local (30-day retention) + Google Drive via rclone
+- Tailscale-only access in production. Zero ports open to the public internet
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
 | Backend | Python 3.12+ / FastAPI |
-| Database | SQLite (WAL) / SQLAlchemy 2.0 |
+| Database | SQLite (WAL) / SQLAlchemy 2.0 / Alembic |
 | Templates | Jinja2 + HTMX + daisyUI |
 | PDF | fpdf2 (Noto font for ₹) |
 | Printing | python-escpos |
@@ -35,15 +57,6 @@ Runs on a free-tier cloud VM, reachable from any device via Tailscale.
 | Hosting | Oracle Cloud Free Tier (or any Linux VM) |
 | Offsite backups | rclone → Google Drive |
 
-## Screenshots
-
-### Today — dispatch and production
-
-![Today page](docs/screenshots/today.png)
-
-### Orders — search, filter, status at a glance
-
-![Orders list](docs/screenshots/orders.png)
 ## Quick start (local dev)
 
 ```powershell
@@ -59,10 +72,12 @@ Copy-Item .env.example .env
 python -c "import secrets; print(secrets.token_urlsafe(48))"
 # Paste output into SECRET_KEY in .env
 
+alembic upgrade head
+
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-Open http://127.0.0.1:8000 — it redirects to `/today`.
+Open http://127.0.0.1:8000 — redirects to `/today`.
 
 ## Configuration
 
@@ -82,18 +97,24 @@ All settings live in `.env`. See `.env.example` for the full list.
 | `REPORTS_DIR` | Where monthly PDFs and CSVs are written |
 | `WHATSAPP_ENABLED` | Toggle WhatsApp buttons |
 | `WHATSAPP_MESSAGES_FILE` | Path to message templates JSON |
+| `WHATSAPP_DEFAULT_COUNTRY_CODE` | For phone normalization, default `91` |
 
 ## Data model
 
-- **Customer** — soft delete via `is_active`, partial unique index on phone
-- **Address** — multiple per customer, exactly one default
-- **Product** — soft delete, weight/volume, pack size, GST rate
-- **Order** — human-readable `HOD-YYYY-NNNN` number from a sequence table
-- **OrderItem** — frozen unit price, GST rate, GST amount, line total (all `Numeric`)
-- **Payment** — one row per transaction, explicit `received_at`
-- **Invoice** — immutable snapshot: business identity, billed-to, line items as JSON, all totals as of issue time
-- **NumberSequence** — monotonic counter per prefix; guarantees gapless numbering
-- **AuditLog** — append-only; commits with the mutation it describes
+| Table | Purpose |
+|---|---|
+| `customers` | Soft delete via `is_active`, partial unique index on phone |
+| `addresses` | Multiple per customer, exactly one default |
+| `products` | Soft delete, weight/volume, pack size, GST rate |
+| `ingredients` | Raw materials and packaging. Unit, threshold, weighted-average cost |
+| `product_ingredients` | Recipe BOM. Quantity stored in the ingredient's own unit |
+| `stock_movements` | Append-only ledger. Every stock change is a row |
+| `orders` | Human-readable `HOD-YYYY-NNNN` number from a sequence table |
+| `order_items` | Frozen unit price, GST rate, GST amount, line total (all `Numeric`) |
+| `payments` | One row per transaction, explicit `received_at` |
+| `invoices` | Immutable snapshot: business, billed-to, line items as JSON, all totals |
+| `number_sequences` | Monotonic counter per prefix; gapless numbering |
+| `audit_log` | Append-only; commits with the mutation it describes |
 
 ## Development
 
@@ -101,12 +122,31 @@ All settings live in `.env`. See `.env.example` for the full list.
 # Fast tests (no browser) — ~5 seconds
 pytest
 
-# Browser-based UI tests — ~50 seconds
+# Browser UI tests — ~50 seconds
 pytest tests/ui -v
 
 # Lint
 ruff check app tests
+
+# Pre-commit (before every commit)
+pre-commit run --all-files
+
+# CSS rebuild (after template class changes)
+.\build-css.ps1
 ```
+
+### Database migrations
+
+Schema changes go through Alembic. The dev workflow:
+
+1. Edit a model
+2. `alembic revision --autogenerate -m "add foo to bar"`
+3. **Review the generated file.** Autogenerate usually works but can miss server defaults or partial indexes.
+4. `alembic upgrade head`
+5. Run tests
+6. Commit the model change + the migration file
+
+Never edit an applied migration. Create a new one that changes what needs changing.
 
 ### Project layout
 
@@ -122,40 +162,43 @@ app/
   utils/
     money.py             Decimal helpers
     time.py              Naive-UTC storage + business-tz display
-    sku.py               SKU generation and normalization
+    sku.py               SKU generation
+    units.py             Unit groups and conversion
     escpos_printer.py    Thermal printer
   templates/             Jinja2 + HTMX + daisyUI
   static/                Pre-built Tailwind, fonts, favicon
 
+alembic/                 Migrations
+config/
+  messages.json          WhatsApp message templates
 scripts/
   backup.py              Nightly backup script
-  monthly_report.py      Monthly report generator (for cron)
+  monthly_report.py      Monthly report generator
+  build-css.ps1          (at repo root) CSS rebuild
 
 tests/
   conftest.py            Fixtures (in-memory SQLite with FK ON)
-  ui/                    Playwright tests
+  ui/                    Playwright browser tests
   ...
-
-config/
-  messages.json          WhatsApp message templates
 ```
 
 ## Key design decisions
 
-- **Money is `Decimal`, never `Float`.** Columns are `Numeric(12,2)`. All arithmetic goes through `app.utils.money.money()`. Per-line rounding, half-up.
-- **Invoices are immutable.** Editing an order after issuing does not change the invoice.
-- **Numbering comes from a sequence table**, not a count. Concurrency-safe and gapless.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants that must not be broken.
+
+- **Money is `Decimal`.** Columns are `Numeric(12,2)`. All arithmetic goes through `app.utils.money`.
+- **Invoices are immutable.** Editing an order after issue does not change the invoice.
+- **Numbering comes from a sequence table.** Concurrency-safe and gapless.
 - **Audit writes commit with the mutation.** `log_action` never commits on its own.
 - **Foreign keys are enforced** via `PRAGMA foreign_keys=ON` on every connection.
-- **WAL + busy_timeout** so backups and writes don't deadlock.
-- **Naive UTC storage, business-tz display.** See `app/utils/time.py`.
-- **Fulfillment and payment are orthogonal.** Two separate badges, two separate state machines.
-- **Tailscale-only access in production.** No ports open to the public internet.
+- **Inventory is a ledger.** `on_hand` is `SUM(delta)` over `stock_movements`.
+- **Recipe quantities are always in the ingredient's own unit.** Conversion happens at the boundary.
+- **Fulfillment and payment are orthogonal.** Two state machines, two badges.
 
 ## Operations
 
 - Local: see [docs/OPERATIONS.md](docs/OPERATIONS.md)
-- Deployment, recovery, and cron: held in a private companion repo (coordinates and secrets)
+- Deployment, recovery, and cron: in a private companion repo (coordinates and secrets)
 
 ## License
 
