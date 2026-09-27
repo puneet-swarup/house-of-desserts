@@ -1,1 +1,0 @@
-# POST /orders/{id}/payments
