@@ -4,7 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ settings.app_name }}{% endblock %}</title>
-    <link rel="icon" type="image/png" href="/static/images/logo.png" />
+        <link rel="icon" type="image/png" href="/static/images/logo.png" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/static/manifest.json" />
+    <meta name="theme-color" content="#d97706" />
+    <link rel="apple-touch-icon" href="/static/images/logo.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="HOD" />
+    
     <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
     <script src="/static/js/htmx.min.js"></script>
     <script src="/static/js/htmx.min.js"></script>

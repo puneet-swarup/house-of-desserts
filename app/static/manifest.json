@@ -1,0 +1,25 @@
+{
+  "name": "House of Desserts",
+  "short_name": "HOD",
+  "description": "Order management for a home bakery",
+  "start_url": "/today",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fffbeb",
+  "theme_color": "#d97706",
+  "icons": [
+    {
+      "src": "/static/images/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/images/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
