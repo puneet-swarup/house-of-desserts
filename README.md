@@ -1,9 +1,11 @@
 # House of Desserts
 
-A self-hosted order management system for a small bakery.
+A self-hosted operations system for a small bakery.
 
 Built for speed, offline-friendly operation, and zero infrastructure cost.
 Runs on a free-tier cloud VM, reachable from any device via Tailscale.
+Covers order management, recipe-driven inventory, invoicing, tax-ready
+reports, and WhatsApp-based customer communication.
 
 ## What it does
 
@@ -115,6 +117,7 @@ All settings live in `.env`. See `.env.example` for the full list.
 | `invoices` | Immutable snapshot: business, billed-to, line items as JSON, all totals |
 | `number_sequences` | Monotonic counter per prefix; gapless numbering |
 | `audit_log` | Append-only; commits with the mutation it describes |
+| `alembic_version` | Auto-managed by Alembic. Never edit or delete manually. |
 
 ## Development
 
@@ -204,3 +207,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants that must no
 
 All rights reserved. This source is published for portfolio and evaluation
 purposes only. See [LICENSE](LICENSE) for terms.
+
+## Scope
+
+This project is deliberately narrow: single-tenant, single-location, home-bakery
+scale. It will not scale to a chain, doesn't do multi-user roles, and doesn't
+attempt general-purpose e-commerce. If you need any of those, this is the wrong
+tool. If you're a home baker who wants to run your kitchen without renting
+infrastructure, it's the right one.
