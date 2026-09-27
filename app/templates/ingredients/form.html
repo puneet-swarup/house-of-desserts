@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% set is_edit = ingredient is not none %}
+{% block title %}{{ "Edit" if is_edit else "Add" }} Ingredient — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto space-y-4">
+
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-extrabold text-amber-900">{{ "Edit" if is_edit else "Add" }} Ingredient</h1>
+        <a href="{{ '/ingredients/' ~ ingredient.id if is_edit else '/ingredients' }}" class="btn btn-ghost btn-sm">← Back</a>
+    </div>
+
+    {% if error %}
+    <div class="alert alert-error text-sm py-3"><span>{{ error }}</span></div>
+    {% endif %}
+
+    <form method="post"
+          action="{{ '/ingredients/' ~ ingredient.id ~ '/edit' if is_edit else '/ingredients' }}"
+          class="space-y-4">
+
+        <!-- Details -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Details</h2>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Name *</span></label>
+                    <input type="text" name="name"
+                           value="{{ (ingredient.name if is_edit else (form_data.name if form_data else '')) or '' }}"
+                           class="input input-bordered w-full" placeholder="e.g., All-purpose flour" required />
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Kind</span></label>
+                        {% set cur_kind = (ingredient.kind.value if is_edit else (form_data.kind if form_data else 'RAW')) %}
+                        <select name="kind" class="select select-bordered w-full">
+                            <option value="RAW" {% if cur_kind == 'RAW' %}selected{% endif %}>Raw material</option>
+                            <option value="PACKAGING" {% if cur_kind == 'PACKAGING' %}selected{% endif %}>Packaging</option>
+                        </select>
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label"><span class="label-text font-semibold">Unit</span></label>
+                        {% set cur_unit = (ingredient.unit if is_edit else (form_data.unit if form_data else '')) or '' %}
+                        <select name="unit" class="select select-bordered w-full">
+                            <option value="">—</option>
+                            {% for u in ['g', 'kg', 'ml', 'l', 'pcs', 'packets'] %}
+                            <option value="{{ u }}" {% if cur_unit == u %}selected{% endif %}>{{ u }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-control">
+                    <label class="label"><span class="label-text font-semibold">Notes</span></label>
+                    <textarea name="notes" rows="2" class="textarea textarea-bordered w-full"
+                              placeholder="Supplier, brand, storage notes...">{{ (ingredient.notes if is_edit else (form_data.notes if form_data else '')) or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stock settings -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Stock settings</h2>
+
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text font-semibold">Reorder threshold</span>
+                    </label>
+                    <input type="number" step="0.001" min="0" name="reorder_threshold"
+                           value="{{ (ingredient.reorder_threshold if is_edit else (form_data.reorder_threshold if form_data else 0)) or 0 }}"
+                           class="input input-bordered w-full" />
+                    <label class="label">
+                        <span class="label-text-alt text-xs text-base-content/60">
+                            Alert when on-hand stock falls at or below this value.
+                        </span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Opening stock (create only) -->
+        {% if not is_edit %}
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body space-y-4">
+                <h2 class="text-sm font-semibold text-base-content/50 uppercase">Opening stock (optional)</h2>
+                <p class="text-xs text-base-content/60 -mt-2">
+                    If you already have some of this on hand, enter it here. It will be
+                    recorded as the first Purchase in the ledger. Leave blank to start at zero.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-semibold">Quantity</span>
+                        </label>
+                        <input type="number" step="0.001" min="0" name="initial_stock"
+                               value="{{ form_data.initial_stock if form_data and form_data.initial_stock else '' }}"
+                               class="input input-bordered w-full" placeholder="e.g., 5000" />
+                    </div>
+
+                    <div class="form-control">
+                        <label class="label">
+                            <span class="label-text font-semibold">Unit cost ({{ settings.currency }})</span>
+                        </label>
+                        <input type="number" step="0.0001" min="0" name="initial_stock_cost"
+                               value="{{ form_data.initial_stock_cost if form_data and form_data.initial_stock_cost else '' }}"
+                               class="input input-bordered w-full" placeholder="e.g., 0.05" />
+                    </div>
+                </div>
+                <p class="text-xs text-base-content/60">
+                    Unit cost above becomes the ingredient's starting weighted-average cost.
+                    Change it later by recording new purchases.
+                </p>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Active toggle -->
+        <div class="card bg-base-100 shadow-sm">
+            <div class="card-body">
+                <label class="cursor-pointer flex items-center gap-3">
+                    <input type="hidden" name="is_active" value="0" />
+                    <input type="checkbox" name="is_active" value="1"
+                           {% if not is_edit or ingredient.is_active %}checked{% endif %}
+                           class="toggle toggle-primary" />
+                    <span class="font-medium">Active</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="flex gap-2">
+            <button type="submit" class="btn btn-primary">{{ "Save Changes" if is_edit else "Create" }}</button>
+            <a href="{{ '/ingredients/' ~ ingredient.id if is_edit else '/ingredients' }}" class="btn btn-ghost">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

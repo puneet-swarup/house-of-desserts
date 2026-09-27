@@ -103,6 +103,7 @@
                         ⋯ <span class="hidden sm:inline">More</span>
                     </summary>
                     <div class="nav-more-menu">
+                        <a href="/ingredients" class="{% if '/ingredients' in request.url.path %}active{% endif %}">📦 Inventory</a>
                         <a href="/reports" class="{% if '/reports' in request.url.path %}active{% endif %}">📊 Reports</a>
                         <a href="/dashboard" class="{% if '/dashboard' in request.url.path %}active{% endif %}">📈 Dashboard</a>
                         <a href="/export" class="{% if '/export' in request.url.path %}active{% endif %}">📥 Export</a>

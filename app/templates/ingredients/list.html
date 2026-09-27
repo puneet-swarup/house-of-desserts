@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Ingredients — {{ settings.app_name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+
+    <div class="flex justify-between items-center flex-wrap gap-2">
+        <h1 class="text-2xl font-extrabold text-amber-900">Inventory</h1>
+        <div class="flex gap-2">
+            <a href="/ingredients/new" class="btn btn-amber btn-sm font-semibold">+ Add Ingredient</a>
+        </div>
+    </div>
+
+    {% if low_count %}
+    <div class="alert alert-warning">
+        <span>⚠️ <strong>{{ low_count }}</strong> ingredient{{ '' if low_count == 1 else 's' }} below reorder threshold.</span>
+    </div>
+    {% endif %}
+
+    <!-- Filter -->
+    <div class="tabs tabs-boxed w-fit">
+        <a href="/ingredients" class="tab {{ 'tab-active' if not filter_kind else '' }}">All</a>
+        <a href="/ingredients?kind=RAW" class="tab {{ 'tab-active' if filter_kind == 'RAW' else '' }}">Raw materials</a>
+        <a href="/ingredients?kind=PACKAGING" class="tab {{ 'tab-active' if filter_kind == 'PACKAGING' else '' }}">Packaging</a>
+    </div>
+
+    {% if rows %}
+
+    <!-- Desktop: table -->
+    <div class="hidden md:block card bg-base-100 shadow-sm">
+        <div class="overflow-x-auto">
+            <table class="table">
+                <thead>
+                    <tr class="text-amber-900">
+                        <th>Name</th>
+                        <th>Kind</th>
+                        <th class="text-right">On hand</th>
+                        <th class="text-right">Threshold</th>
+                        <th class="text-right">Unit cost</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    {% set ing = row.ingredient %}
+                    <tr class="hover {% if not ing.is_active %}opacity-50{% endif %}">
+                        <td>
+                            <a href="/ingredients/{{ ing.id }}" class="font-semibold hover:underline">
+                                {{ ing.name }}
+                            </a>
+                        </td>
+                        <td><span class="badge badge-outline badge-sm">{{ ing.kind.value }}</span></td>
+                        <td class="text-right font-mono text-sm">{{ row.on_hand }} {{ ing.unit }}</td>
+                        <td class="text-right text-sm text-base-content/60">
+                            {{ ing.reorder_threshold }} {{ ing.unit }}
+                        </td>
+                        <td class="text-right text-sm">{{ ing.cost_per_unit|money }}</td>
+                        <td>
+                            {% if not ing.is_active %}
+                                <span class="badge badge-ghost badge-sm">Inactive</span>
+                            {% elif row.low %}
+                                <span class="badge badge-warning badge-sm">Low</span>
+                            {% else %}
+                                <span class="badge badge-success badge-sm">OK</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="flex gap-1 justify-end">
+                                <a href="/ingredients/{{ ing.id }}" class="btn btn-outline btn-xs">Open</a>
+                                <a href="/ingredients/{{ ing.id }}/edit" class="btn btn-outline btn-xs">Edit</a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Mobile: cards -->
+    <div class="md:hidden space-y-3">
+        {% for row in rows %}
+        {% set ing = row.ingredient %}
+        <div class="card bg-base-100 shadow-sm {% if not ing.is_active %}opacity-60{% endif %}">
+            <div class="card-body p-4 space-y-2">
+                <div class="flex justify-between items-start">
+                    <div class="min-w-0">
+                        <a href="/ingredients/{{ ing.id }}" class="font-bold text-lg hover:underline">
+                            {{ ing.name }}
+                        </a>
+                        <p class="text-xs text-base-content/60">{{ ing.kind.value }}</p>
+                    </div>
+                    {% if not ing.is_active %}
+                        <span class="badge badge-ghost badge-sm shrink-0">Inactive</span>
+                    {% elif row.low %}
+                        <span class="badge badge-warning badge-sm shrink-0">Low</span>
+                    {% else %}
+                        <span class="badge badge-success badge-sm shrink-0">OK</span>
+                    {% endif %}
+                </div>
+
+                <div class="flex justify-between text-sm">
+                    <span class="text-base-content/60">On hand</span>
+                    <span class="font-mono font-semibold">{{ row.on_hand }} {{ ing.unit }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-base-content/60">Threshold</span>
+                    <span class="font-mono">{{ ing.reorder_threshold }} {{ ing.unit }}</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-base-content/60">Unit cost</span>
+                    <span>{{ ing.cost_per_unit|money }}</span>
+                </div>
+
+                <div class="flex gap-2 pt-2 border-t border-base-200">
+                    <a href="/ingredients/{{ ing.id }}" class="btn btn-outline btn-xs flex-1">Open</a>
+                    <a href="/ingredients/{{ ing.id }}/edit" class="btn btn-outline btn-xs flex-1">Edit</a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <div class="card bg-base-100 shadow-sm">
+        <div class="card-body text-center py-12">
+            <p class="text-5xl mb-4">📦</p>
+            <h2 class="text-xl font-bold">No ingredients yet</h2>
+            <p class="text-base-content/60 mt-1">Add flour, butter, packaging — anything you keep stock of.</p>
+            <a href="/ingredients/new" class="btn amber mt-4">+ Add Ingredient</a>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}

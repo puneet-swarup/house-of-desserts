@@ -55,6 +55,11 @@ addopts = "--ignore=tests/ui -q"
 markers = [
     "ui: Playwright UI tests (require running app + browser)",
 ]
+filterwarnings = [
+    # Third-party deprecations we can't fix locally
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated.*:DeprecationWarning",
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated.*:DeprecationWarning",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
