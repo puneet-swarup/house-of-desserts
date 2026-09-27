@@ -5,7 +5,7 @@ FastAPI application entry point.
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -132,3 +132,20 @@ _FAVICON = (
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon() -> HTMLResponse:
     return HTMLResponse(content=_FAVICON, media_type="image/svg+xml")
+
+
+_SW_JS = (
+    "self.addEventListener('install',e=>self.skipWaiting());"
+    "self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));"
+    "self.addEventListener('fetch',()=>{});"
+)
+
+
+@app.get("/sw.js", include_in_schema=False)
+def service_worker():
+    """Minimal service worker at the root path.
+
+    Android Chrome requires a service worker with a fetch handler before
+    it offers "Install app". A no-op handler is sufficient.
+    """
+    return Response(content=_SW_JS, media_type="application/javascript")

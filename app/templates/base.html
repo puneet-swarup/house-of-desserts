@@ -14,7 +14,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="HOD" />
-    
+
     <link href="/static/css/app.css" rel="stylesheet" type="text/css" />
     <script src="/static/js/htmx.min.js"></script>
     <script src="/static/js/htmx.min.js"></script>
@@ -195,6 +195,15 @@
             if (!d.contains(e.target)) d.removeAttribute('open');
         });
     });
+
+    // Register the service worker (required for Android install prompt).
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js').catch(() => {
+                // Silently ignore — desktop Chrome and dev environments don't need it.
+            });
+        });
+    }
     </script>
 
     {% block modals %}{% endblock %}
