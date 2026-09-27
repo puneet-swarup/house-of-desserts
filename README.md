@@ -1,8 +1,10 @@
 # House of Desserts
+
 [![test](https://github.com/puneet-swarup/house-of-desserts/actions/workflows/test.yml/badge.svg)](https://github.com/puneet-swarup/house-of-desserts/actions/workflows/test.yml)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)](https://www.python.org/downloads/)
 [![License: All Rights Reserved](https://img.shields.io/badge/license-All%20Rights%20Reserved-red)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-200%2B-brightgreen)](tests/)
+
 A self-hosted operations system for a small bakery.
 
 Built for speed, offline-friendly operation, and zero infrastructure cost.
