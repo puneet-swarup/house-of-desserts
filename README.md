@@ -8,7 +8,7 @@
 A self-hosted operations system for a small bakery.
 
 Built for speed, offline-friendly operation, and zero infrastructure cost.
-Runs on a free-tier cloud VM, reachable from any device via Tailscale.
+Runs on a small self-hosted server, reachable from any device on your private network.
 Covers order management, recipe-driven inventory, invoicing, tax-ready
 reports, and WhatsApp-based customer communication.
 
@@ -47,8 +47,8 @@ reports, and WhatsApp-based customer communication.
 **Operations**
 - WhatsApp links (configurable templates, no API keys)
 - Audit log: append-only, written in the same transaction as the mutation
-- Nightly backups: local (30-day retention) + Google Drive via rclone
-- Tailscale-only access in production. Zero ports open to the public internet
+- Nightly backups: local (30-day retention) + encrypted offsite copy
+- Private-network-only access in production. Zero ports open to the public internet
 
 ## Stack
 
@@ -60,9 +60,9 @@ reports, and WhatsApp-based customer communication.
 | PDF | fpdf2 (Noto font for ₹) |
 | Printing | python-escpos |
 | Config | pydantic-settings |
-| Remote access | Tailscale |
-| Hosting | Oracle Cloud Free Tier (or any Linux VM) |
-| Offsite backups | rclone → Google Drive |
+| Remote access | Private network (VPN / LAN) |
+| Hosting | Any local Linux/Windows host |
+| Offsite backups | Encrypted archive to private storage |
 
 ## Quick start (local dev)
 
@@ -205,8 +205,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the invariants that must no
 
 ## Operations
 
-- Local: see [docs/OPERATIONS.md](docs/OPERATIONS.md)
-- Deployment, recovery, and cron: in a private companion repo (coordinates and secrets)
+- Local operations: see the runbooks kept with the deployment host
+- Deployment, recovery, and scheduling details are kept private and are not part of this repository
 
 ## License
 

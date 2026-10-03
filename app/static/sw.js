@@ -1,6 +1,6 @@
 // House of Desserts — minimal service worker.
 // A no-op fetch listener is enough to make Android Chrome offer "Install app".
-// We're not caching anything; the app runs on Tailscale and doesn't need offline.
+// We're not caching anything; the app is used online and doesn't need offline.
 
 self.addEventListener('install', (event) => {
     self.skipWaiting();

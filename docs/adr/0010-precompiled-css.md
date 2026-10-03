@@ -42,7 +42,7 @@ During development, use --watch mode for auto-rebuild on template changes.
 
 ## Consequences
 - (+) ~500 ms to styled render (was 4–10 s). No FOUC.
-- (+) Zero CDN dependency. Works fully offline over Tailscale.
+- (+) Zero CDN dependency. Works fully offline on the local network.
 - (+) Single ~20 KB CSS file. Fast on any connection.
 - (−) Must rebuild CSS after adding new Tailwind classes in templates.
 - (−) tailwindcss.exe binary (~30 MB) in the project (gitignored).

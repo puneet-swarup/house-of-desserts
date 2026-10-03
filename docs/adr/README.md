@@ -17,7 +17,6 @@ We use the **Nygard template**: Status → Context → Decision → Consequences
 | [0002](0002-python-fastapi-backend.md) | Python + FastAPI as Backend | Accepted | 2026-09-21 |
 | [0003](0003-sqlite-sqlalchemy-database.md) | SQLite + SQLAlchemy for Data Layer | Accepted | 2026-09-21 |
 | [0004](0004-htmx-daisyui-frontend.md) | HTMX + daisyUI for Frontend | Accepted | 2026-09-21 |
-| [0005](0005-local-deployment-tailscale.md) | Local Deployment + Tailscale | Accepted | 2026-09-21 |
 | [0006](0006-escpos-thermal-printing.md) | ESC/POS for Thermal Printing | Accepted | 2026-09-21 |
 | [0007](0007-environment-configuration.md) | Environment-Based Configuration | Accepted | 2026-09-21 |
 | [0008](0008-alembic-migrations.md) | Alembic for Schema Migrations | Accepted | 2026-09-21 |
